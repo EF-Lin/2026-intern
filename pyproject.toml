@@ -1,0 +1,9 @@
+[project]
+name = "2026-intern"
+requires-python = ">=3.13"
+description = ""
+readme = "README.md"
+keywords = []
+dependencies = [
+	""
+]
