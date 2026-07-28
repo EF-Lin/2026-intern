@@ -2,3 +2,6 @@ t.py
 t/
 data_100Hz/
 data/
+tests/
+.vscode/
+__pycache__/

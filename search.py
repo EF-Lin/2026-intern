@@ -2,33 +2,36 @@ import os
 
 
 class Search:
-    def __init__(self, folder: str, number: tuple[int, int], filename: str = "TW.{num}..S.D.2026.189"):
+    def __init__(self, folder: str, filename: str = "TW.{num}..S.D.2026.189"):
         self.folder = os.path.normpath(folder)
-        self.number = number
         self.filename = filename
+        self.folder_files: list = sorted(os.listdir(self.folder))
 
-        self.start = self.filename.replace("{num}", f"{self.number[0]:05d}")
-        self.end = self.filename.replace("{num}", f"{self.number[1]:05d}")
-        self.folder_files = sorted(os.listdir(self.folder))
+    def find(self, number: int) -> str:
+        try:
+            return os.path.normpath(f"{self.folder}\\{self.folder_files[self.folder_files.index(self.filename.replace("{num}", f"{number:05d}"))]}")
+        except ValueError as ex:
+            return f"Error: the file dose not exist.\n{str(ex)}"
+        except Exception as ex:
+            return str(ex)
 
-    def find(self) -> list[str]:
-        files = []
-        flag = False
-        for i in self.folder_files:
-            if i == self.start:
-                flag = True
-                files.append(os.path.normpath(f"{self.folder}\\{i}"))
-            elif i == self.end:
-                flag = False
-                files.append(os.path.normpath(f"{self.folder}\\{i}"))
-            elif flag:
-                files.append(os.path.normpath(f"{self.folder}\\{i}"))
-            else:
-                pass
-        return files
-
-
-if __name__ == "__main__":
-    se = Search(folder="data_100Hz/", number=(55, 100))
-    l = se.find()
-    print(l)
+    def multi_find(self, number: int, range: int) -> list[str]:
+        try:
+            start = self.filename.replace("{num}", f"{number:05d}")
+            end = self.filename.replace("{num}", f"{number+range:05d}")
+            files = []
+            flag = False
+            for i in self.folder_files:
+                if i == start:
+                    flag = True
+                    files.append(os.path.normpath(f"{self.folder}\\{i}"))
+                elif i == end:
+                    flag = False
+                    files.append(os.path.normpath(f"{self.folder}\\{i}"))
+                elif flag:
+                    files.append(os.path.normpath(f"{self.folder}\\{i}"))
+                else:
+                    pass
+            return files
+        except Exception as ex:
+            return [str(ex)]
