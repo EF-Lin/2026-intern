@@ -1,8 +1,13 @@
 import os
+from typing import Optional
 
 
 class Search:
-    def __init__(self, folder: str, filename: str = "TW.{num}..S.D.2026.189"):
+    def __init__(
+            self,
+            folder: str,
+            filename: Optional[str] = "TW.{num}..S.D.2026.189"
+    ):
         self.folder = os.path.normpath(folder)
         self.filename = filename
         self.folder_files: list = sorted(os.listdir(self.folder))
