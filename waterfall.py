@@ -11,15 +11,15 @@ class Water:
             st: Stream,
             frequency: Optional[tuple[int, int]] = (1, 10),
             range: Optional[tuple[UTCDateTime, UTCDateTime]] = None,
-            y_factor: Optional[int] = 20
+            y_factor: Optional[int] = 20,
+            name: Optional[str] = None
     ):
         self.st: Stream = st
         self.frequency: tuple = frequency
         self.y_factor = y_factor
-        if range != None:
-            self.range: tuple = range
-        else:
-            self.range = (max(tr.stats.starttime for tr in st), min(tr.stats.endtime for tr in st))
+
+        self.range: tuple = range if range != None else (max(tr.stats.starttime for tr in st), min(tr.stats.endtime for tr in st))
+        self.name = name if name != None else f"{self.st[0].id}_to_{self.st[0-1].id}_waterfall_plot"
 
     def process(self):
         self.st.detrend("demean")
@@ -31,7 +31,7 @@ class Water:
     def cut(self):
         self.st.trim(starttime=self.range[0], endtime=self.range[1])
 
-    def waterfall_plot(self):
+    def waterfall(self):
         self.data = np.array([tr.data for tr in self.st])
         _, ax = plt.subplots(figsize=(12, 6))
 
@@ -67,4 +67,11 @@ class Water:
         ax.set_title(f"{self.st[0].id} to {self.st[0-1].id} Waterfall Plot")
         plt.setp(ax.xaxis.get_majorticklabels(), rotation=10, ha="center")
         plt.tight_layout()
+
+    def waterfall_plot(self):
+        self.waterfall()
         plt.show()
+
+    def waterfall_save(self):
+        self.waterfall()
+        plt.savefig(f"{self.name.replace()}.png", dpi=300)

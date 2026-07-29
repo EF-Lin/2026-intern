@@ -17,3 +17,9 @@ class Finger:
 
     def focus_plot(self):
         self.stream.plot(starttime=self.focus_time - self.range, endtime=self.focus_time + self.range)
+
+    def focus_save(self):
+        self.stream.plot(
+            starttime=self.focus_time - self.range,
+            endtime=self.focus_time + self.range,
+            outfile=f"{UTCDateTime(self.focus_time - self.range).strftime("%Y-%m-%dT%H:%M:%S")}_to_{UTCDateTime(self.focus_time + self.range).strftime("%Y-%m-%dT%H:%M:%S")}_wave_plot.png")
