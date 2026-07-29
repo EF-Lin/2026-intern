@@ -25,14 +25,15 @@ class Water:
         self.st.detrend("demean")
         self.st.detrend("linear")
         self.st.filter("bandpass", freqmin=self.frequency[0], freqmax=self.frequency[1])
-        # st.normalize()
+        # self.st.normalize()
         # self.data = np.array([tr.data for tr in st])
 
     def cut(self):
-        self.st.trim(starttime=self.range[0], endtime=self.range[1])
+        self.st_plot = self.st.copy()
+        self.st_plot.trim(starttime=self.range[0], endtime=self.range[1])
 
     def waterfall(self):
-        self.data = np.array([tr.data for tr in self.st])
+        self.data = np.array([tr.data for tr in self.st_plot])
         _, ax = plt.subplots(figsize=(12, 6))
 
         im = ax.imshow(
@@ -51,12 +52,11 @@ class Water:
         cbar.set_label("Amplitude")
 
         # Y
-        trace_ids = [tr.id for tr in self.st]
+        trace_ids = [tr.id for tr in self.st_plot]
         n_traces = len(trace_ids)
-        step = n_traces // self.y_factor
 
-        ax.set_yticks(range(0, n_traces, step))
-        ax.set_yticklabels([trace_ids[i] for i in range(0, n_traces, step)])
+        ax.set_yticks(range(0, n_traces, self.y_factor))
+        ax.set_yticklabels([trace_ids[i] for i in range(0, n_traces, self.y_factor)])
         ax.set_ylabel("Trace")
 
         # X
@@ -64,14 +64,16 @@ class Water:
         ax.xaxis_date()
         ax.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d %H:%M:%S'))
 
-        ax.set_title(f"{self.st[0].id} to {self.st[0-1].id} Waterfall Plot")
+        ax.set_title(f"{self.st_plot[0].id} to {self.st_plot[0-1].id} Waterfall Plot")
         plt.setp(ax.xaxis.get_majorticklabels(), rotation=10, ha="center")
         plt.tight_layout()
 
     def waterfall_plot(self):
         self.waterfall()
         plt.show()
+        del self.st_plot
 
     def waterfall_save(self):
         self.waterfall()
-        plt.savefig(f"{self.name.replace()}.png", dpi=300)
+        plt.savefig(f"image/{self.name}.png", dpi=100)
+        del self.st_plot
