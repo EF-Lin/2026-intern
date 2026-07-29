@@ -9,31 +9,39 @@ class Water:
     def __init__(
             self,
             st: Stream,
-            frequency: Optional[tuple[int, int]] = (1, 10),
-            range: Optional[tuple[UTCDateTime, UTCDateTime]] = None,
-            y_factor: Optional[int] = 20,
-            name: Optional[str] = None
-    ):
+            frequency: Optional[tuple[int, int]] = (1, 20)
+        ):
         self.st: Stream = st
         self.frequency: tuple = frequency
-        self.y_factor = y_factor
-
-        self.range: tuple = range if range != None else (max(tr.stats.starttime for tr in st), min(tr.stats.endtime for tr in st))
-        self.name = name if name != None else f"{self.st[0].id}_to_{self.st[0-1].id}_waterfall_plot"
 
     def process(self):
         self.st.detrend("demean")
         self.st.detrend("linear")
         self.st.filter("bandpass", freqmin=self.frequency[0], freqmax=self.frequency[1])
         # self.st.normalize()
-        # self.data = np.array([tr.data for tr in st])
+        return self.st
+
+class Fall:
+    def __init__(
+            self,
+            st: Stream,
+
+            y_factor: Optional[int] = 1,
+            range: Optional[tuple[UTCDateTime, int]] = None,
+            name: Optional[str] = None
+        ):
+        self.st = st
+        self.y_factor = y_factor
+
+        self.range = (range[0]-range[1], range[0]+range[1]) if range != None else (max(tr.stats.starttime for tr in st), min(tr.stats.endtime for tr in st))
+
+        self.name = name if name != None else f"{self.st[0].id}_to_{self.st[0-1].id}_waterfall_plot_{(self.range[0]).strftime("%Y-%m-%dT%H:%M:%S").replace(':', '')}"
 
     def cut(self):
-        self.st_plot = self.st.copy()
-        self.st_plot.trim(starttime=self.range[0], endtime=self.range[1])
+        self.st.trim(starttime=self.range[0], endtime=self.range[1])
 
-    def waterfall(self):
-        self.data = np.array([tr.data for tr in self.st_plot])
+    def set_plot(self):
+        self.data = np.array([tr.data for tr in self.st])
         _, ax = plt.subplots(figsize=(12, 6))
 
         im = ax.imshow(
@@ -52,7 +60,7 @@ class Water:
         cbar.set_label("Amplitude")
 
         # Y
-        trace_ids = [tr.id for tr in self.st_plot]
+        trace_ids = [tr.id for tr in self.st]
         n_traces = len(trace_ids)
 
         ax.set_yticks(range(0, n_traces, self.y_factor))
@@ -64,16 +72,14 @@ class Water:
         ax.xaxis_date()
         ax.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d %H:%M:%S'))
 
-        ax.set_title(f"{self.st_plot[0].id} to {self.st_plot[0-1].id} Waterfall Plot")
+        ax.set_title(f"{self.st[0].id} to {self.st[0-1].id} Waterfall Plot")
         plt.setp(ax.xaxis.get_majorticklabels(), rotation=10, ha="center")
         plt.tight_layout()
 
     def waterfall_plot(self):
-        self.waterfall()
+        self.set_plot()
         plt.show()
-        del self.st_plot
 
     def waterfall_save(self):
-        self.waterfall()
+        self.set_plot()
         plt.savefig(f"image/{self.name}.png", dpi=100)
-        del self.st_plot
