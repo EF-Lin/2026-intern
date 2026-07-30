@@ -14,7 +14,7 @@ class Search:
 
     def find(self, number: int) -> str:
         try:
-            return os.path.normpath(f"{self.folder}\\{self.folder_files[self.folder_files.index(self.filename.replace("{num}", f"{number:05d}"))]}")
+            return os.path.normpath(f"{self.folder}/{self.folder_files[self.folder_files.index(self.filename.replace("{num}", f"{number:05d}"))]}")
         except ValueError as ex:
             return f"Error: the file dose not exist.\n{str(ex)}"
         except Exception as ex:
@@ -29,12 +29,12 @@ class Search:
             for i in self.folder_files:
                 if i == start:
                     flag = True
-                    files.append(os.path.normpath(f"{self.folder}\\{i}"))
+                    files.append(os.path.normpath(f"{self.folder}/{i}"))
                 elif i == end:
                     flag = False
-                    files.append(os.path.normpath(f"{self.folder}\\{i}"))
+                    files.append(os.path.normpath(f"{self.folder}/{i}"))
                 elif flag:
-                    files.append(os.path.normpath(f"{self.folder}\\{i}"))
+                    files.append(os.path.normpath(f"{self.folder}/{i}"))
                 else:
                     pass
             return files
