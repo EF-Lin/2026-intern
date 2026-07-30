@@ -35,7 +35,7 @@ class Fall:
 
         self.range = (range[0]-range[1], range[0]+range[1]) if range != None else (max(tr.stats.starttime for tr in st), min(tr.stats.endtime for tr in st))
 
-        self.name = name if name != None else f"{self.st[0].id}_to_{self.st[0-1].id}_waterfall_plot_{(self.range[0]).strftime("%Y-%m-%dT%H:%M:%S").replace(':', '')}"
+        self.name = name if name != None else f"{self.st[0].id}_to_{self.st[0-1].id}_waterfall_plot_{self.range[0].strftime("%Y-%m-%dT%H%M%S")}"
 
     def cut(self):
         self.st.trim(starttime=self.range[0], endtime=self.range[1])
@@ -70,10 +70,10 @@ class Fall:
         # X
         ax.set_xlabel("Time (UTC)")
         ax.xaxis_date()
-        ax.xaxis.set_major_formatter(DateFormatter('%Y-%m-%d %H:%M:%S'))
+        ax.xaxis.set_major_formatter(DateFormatter("%H:%M:%S"))
 
-        ax.set_title(f"{self.st[0].id} to {self.st[0-1].id} Waterfall Plot")
-        plt.setp(ax.xaxis.get_majorticklabels(), rotation=10, ha="center")
+        ax.set_title(f"{self.range[0].strftime("%Y-%m-%d")} {self.st[0].id} to {self.st[0-1].id} Waterfall Plot")
+        plt.setp(ax.xaxis.get_majorticklabels(), ha="center")
         plt.tight_layout()
 
     def waterfall_plot(self):
