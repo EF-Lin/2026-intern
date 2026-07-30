@@ -22,4 +22,4 @@ class Finger:
         self.stream.plot(
             starttime=self.focus_time - self.range,
             endtime=self.focus_time + self.range,
-            outfile=f"image/{UTCDateTime(self.focus_time - self.range).strftime("%Y-%m-%dT%H:%M:%S")}_to_{UTCDateTime(self.focus_time + self.range).strftime("%Y-%m-%dT%H:%M:%S")}_wave_plot.png")
+            outfile=f"image/{UTCDateTime(self.focus_time - self.range).strftime("%Y-%m-%dT%H:%M:%S").replace(':', '')}_to_{UTCDateTime(self.focus_time + self.range).strftime("%Y-%m-%dT%H:%M:%S").replace(':', '')}_wave_plot.png")

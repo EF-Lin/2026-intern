@@ -1,8 +1,11 @@
 from obspy import read, Stream
 
 
-def load_data(files: list) -> Stream:
+def load_data(files: list | str) -> Stream:
     data = Stream()
-    for f in files:
-        data += read(f)
+    if type(files) == list:
+        for f in files:
+            data += read(f)
+    else:
+        data = read(files)
     return data
