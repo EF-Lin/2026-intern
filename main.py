@@ -1,8 +1,8 @@
-from load import load_data
-from loadCSV import load_csv
-from finger import Finger
-from search import Search
-from waterfall import Water, Fall
+from src.load.loadTR import load_data
+from src.load.loadCSV import load_csv
+from src.finger import Finger
+from src.search import Search
+from src.waterfall import Water, Fall
 from obspy import UTCDateTime
 
 
