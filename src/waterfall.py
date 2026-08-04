@@ -1,6 +1,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.dates import date2num, DateFormatter
+from matplotlib.colors import TwoSlopeNorm
 from obspy import Stream, UTCDateTime
 from typing import Optional
 
@@ -49,7 +50,8 @@ class Fall:
             aspect="auto",
             cmap="seismic",
             origin="upper",
-            extent=[date2num(self.range[0].datetime), date2num(self.range[1].datetime), self.data.shape[0]-0.5, -0.5]
+            extent=[date2num(self.range[0].datetime), date2num(self.range[1].datetime), self.data.shape[0]-0.5, -0.5],
+            norm=TwoSlopeNorm(vcenter=0, vmin=self.data.min(), vmax=self.data.max())
         )
 
         # if self.frequency != None:
