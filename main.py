@@ -1,8 +1,8 @@
 from src.load.loadTR import load_mini, transfer
 from src.load.loadCSV import load_csv
-from src.finger import Finger
-from src.search import Search
-from src.waterfall import Water, Fall
+from src.plot.finger import Finger
+from src.load.search import Search
+from src.plot.waterfall import Water, Fall
 import numpy as np
 
 
