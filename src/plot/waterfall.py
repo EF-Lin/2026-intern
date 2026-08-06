@@ -4,12 +4,14 @@ import matplotlib.dates as mdates
 # from matplotlib.colors import TwoSlopeNorm
 from dascore import Patch
 from typing import Optional
+from src.utils import mkdir, check_file
 
 
 class Water:
     def __init__(
             self,
             pa: Patch,
+            *,
             frequency: Optional[tuple[int, int]] = (1, 20),
             range: Optional[tuple[np.timedelta64, int]] = None
         ):
@@ -18,21 +20,21 @@ class Water:
         self.r = (range[0] - np.timedelta64(range[1], 's'), range[0] + np.timedelta64(range[1], 's')) if range != None else (self.pa.attrs.time_min, self.pa.attrs.time_min + np.timedelta64(10, 's'))
 
     def cut(self):
-        self.pa = self.pa.select(time=self.r)
+        return self.pa.select(time=self.r)
 
-    def process(self) -> Patch:
-        self.pa = (
-            self.pa
+    def process(self, pa: Patch) -> Patch:
+        return (
+            pa
             .detrend(dim='time', type='constant')  # demean
             .detrend(dim='time', type='linear')    # linear
             .pass_filter(time=self.frequency)
         )
-        return self.pa
 
 class Fall:
     def __init__(
             self,
             pa: Patch,
+            *,
             # y_factor: Optional[int] = 1,
             name: Optional[str] = None
         ):
@@ -41,11 +43,21 @@ class Fall:
         self.name = name if name != None else "Figure"
 
     def set_plot(self):
-        _, ax = plt.subplots()
+        _, ax = plt.subplots(figsize=(12, 6))
+
         self.pa.viz.waterfall(cmap="seismic", ax=ax, scale=0.3)
+
+        self.fig = plt.gcf()
+        cbar_ax = self.fig.axes[-1]
+        cbar_ax.set_ylabel("Amplitude", rotation=270, labelpad=15)
+
         ax.invert_yaxis()
+
         ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
-        ax.set_title(f"{str(self.pa.attrs.time_min.astype("datetime64[m]")).replace('T', '')} Waterfall Plot")
+        ax.set_xlabel("Time (UTC)")
+
+        ax.set_title(f"Hole A {str(self.pa.attrs.time_min.astype("datetime64[m]")).replace('T', ' ')} Waterfall Plot")
+
 
     """
     def cut(self):
@@ -96,4 +108,6 @@ class Fall:
 
     def waterfall_save(self):
         self.set_plot()
-        plt.savefig(f"image/{self.name}.png", dpi=200)
+        mkdir("image/")
+        plt.savefig(check_file(f"image/{self.name}.png"), dpi=200)
+        plt.close(self.fig)
