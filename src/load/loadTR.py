@@ -1,7 +1,7 @@
 from obspy import read, Stream
 from dascore import Patch
 import numpy as np
-from typing import Optional, Tuple
+from typing import Optional
 
 
 def load_mini(files: list | str) -> Stream:
@@ -14,7 +14,7 @@ def load_mini(files: list | str) -> Stream:
     return data
 
 
-def transfer(st: Stream, r: Optional[int] = 4) -> Tuple[Patch, tuple[str, str]]:
+def transfer(st: Stream, r: Optional[int] = 4) -> tuple[Patch, tuple[str, str]]:
     st.trim(
         starttime=max([tr.stats.starttime for tr in st]),
         endtime=min([tr.stats.endtime for tr in st])

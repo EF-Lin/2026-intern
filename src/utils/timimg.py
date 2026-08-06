@@ -7,7 +7,6 @@ def timer(func):
     @wraps(func)
     def wapper(*args, **kwargs):
         start_time = time()
-        result = func(*args, **kwargs)
         atexit.register(lambda: print(f'Run time: {time() - start_time:.8f}'))
-        return result
+        return func(*args, **kwargs)
     return wapper
