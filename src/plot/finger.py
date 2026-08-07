@@ -1,6 +1,7 @@
 from obspy import Stream, UTCDateTime
 from typing import Optional, Any
 from src.utils import mkdir, check_file
+import matplotlib.pyplot as plt
 
 
 class Finger:
@@ -18,6 +19,8 @@ class Finger:
         self.frequency = frequency
 
     def process(self):
+        self.st.detrend("demean")
+        self.st.detrend("linear")
         self.st.filter("bandpass", freqmin=self.frequency[0], freqmax=self.frequency[1])
 
     def focus_plot(self, focus_time: UTCDateTime | str | int | Any):
@@ -27,7 +30,11 @@ class Finger:
     def focus_save(self, focus_time: UTCDateTime | str | int | Any):
         focus_time = UTCDateTime(focus_time)
         mkdir("/image")
-        self.st.plot(
+        fig = self.st.plot(
             starttime=focus_time - self.range,
             endtime=focus_time + self.range,
-            outfile=check_file(f"image/{UTCDateTime(focus_time - self.range).strftime("%Y-%m-%dT%H:%M:%S").replace(':', '')}_to_{UTCDateTime(focus_time + self.range).strftime("%Y-%m-%dT%H%M%S")}_wave_plot.png"))
+            outfile=check_file(f"image/{UTCDateTime(focus_time - self.range).strftime("%Y-%m-%dT%H%M%S")}_to_{UTCDateTime(focus_time + self.range).strftime("%Y-%m-%dT%H%M%S")}_wave_plot.png"),
+            dpi=200,
+            size=(2400, 750)
+        )
+        plt.close(fig)

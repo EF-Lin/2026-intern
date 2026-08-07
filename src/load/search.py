@@ -5,6 +5,7 @@ from typing import Optional
 class Search:
     def __init__(
             self,
+            *,
             folder: str,
             filename: Optional[str] = "TW.{num}..S.D.2026.189"
     ):
