@@ -18,7 +18,7 @@ class Finger:
         self.range = r
         self.n = n
         self.frequency = frequency
-        self.fig = plt.figure(figsize=figsize)
+        self.figsize = figsize
 
     def process(self):
         self.st.detrend("demean")
@@ -31,13 +31,14 @@ class Finger:
         self.st.plot(starttime=focus_time - self.range, endtime=focus_time + self.range)
 
     def focus_save(self, focus_time: UTCDateTime | str | int | Any):
+        self.fig = plt.figure(figsize=self.figsize)
         focus_time = UTCDateTime(focus_time)
         mkdir("/image")
         self.st.plot(
             fig=self.fig,
             starttime=focus_time - self.range,
             endtime=focus_time + self.range,
-            outfile=check_file(f"image/{UTCDateTime(focus_time - self.range).strftime("%Y-%m-%dT%H%M%S")}_to_{UTCDateTime(focus_time + self.range).strftime("%Y-%m-%dT%H%M%S")}_wave_plot.png"),
+            outfile=check_file(f"image/{UTCDateTime(focus_time - self.range).strftime("%Y-%m-%dT%H%M%S")}_to_{UTCDateTime(focus_time + self.range).strftime("%Y-%m-%dT%H%M%S")}_wave_plot-NS.png"),
             dpi=200,
             # size=(5000, 750)
         )

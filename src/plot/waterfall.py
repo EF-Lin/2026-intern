@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
@@ -11,7 +13,7 @@ from math import ceil
 class Water:
     def __init__(
             self,
-            pa: list[Patch],
+            pa: Patch,
             *,
             frequency: Optional[tuple[int, int]] = (1, 20),
             r: Optional[tuple[np.timedelta64, int]] = None
@@ -20,36 +22,39 @@ class Water:
         self.frequency: tuple = frequency
         self.r = (r[0] - np.timedelta64(r[1], 's'), r[0] + np.timedelta64(r[1], 's')) if r != None else (self.pa.attrs.time_min, self.pa.attrs.time_min + np.timedelta64(10, 's'))
 
-    def cut(self):
-        return self.pa.select(time=self.r)
+    def cut(self) -> Water:
+        self.pa = self.pa.select(time=self.r)
+        return self
 
-    def process(self, pa: Patch) -> Patch:
-        return (
-            pa
-            .detrend(dim='time', type='constant') # demean
-            .detrend(dim='time', type='linear') # linear
-            .taper(time=0.01) # taper
-            .pass_filter(time=self.frequency)
-        )
+    def process(self) -> Patch:
+        self.pa = (self.pa
+                   .detrend(dim='time', type='constant') # linear
+                   .detrend(dim='time', type='linear') # demean
+                   .taper(time=0.01) # taper
+                   .pass_filter(time=self.frequency) # filter
+                   )
+        return self
+
 
 class Fall:
     def __init__(
             self,
-            pa: Patch,
+            pa: list[Patch],
             *,
-            filename: Optional[list[str]] = None,
-            title: Optional[list[str]],
+            filename: Optional[str] = None,
+            title: Optional[list[str]] = None,
             figsize: Optional[tuple[int, int]] = (24, 6)
         ):
         self.pa = pa
         self.pa_len = len(self.pa)
-        self.filename = filename if filename else ["Figure" for _ in range(self.pa_len)]
+        self.filename = filename if filename else "Figure"
         self.title = title if title else ["Waterfall Plot" for _ in range(self.pa_len)]
         self.figsize = figsize
 
-    def set_plot(self):
-        nrows = int(self.pa_len**0.5)
-        ncols = int(ceil(self.pa_len/nrows))
+    def set_plot(self, xname: str="Time (UTC)", yname: str="depth") -> Fall:
+        ncols = int(self.pa_len**0.5)
+        nrows = int(ceil(self.pa_len/ncols))
+
         self.fig, self.ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=self.figsize)
         ax_flat = np.atleast_1d(self.ax).flatten()
 
@@ -61,10 +66,14 @@ class Fall:
             # upsidedown
             ax.invert_yaxis()
             # set x-axis
-            self.ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
-            self.ax.set_xlabel("Time (UTC)")
+            ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+            ax.set_xlabel(xname)
+            # set y-axis
+            ax.set_ylabel(yname)
             # set title
             ax.set_title(title)
+
+        return self
 
     """
     def cut(self):
