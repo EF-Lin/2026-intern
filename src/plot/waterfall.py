@@ -5,19 +5,20 @@ import matplotlib.dates as mdates
 from dascore import Patch
 from typing import Optional
 from src.utils import mkdir, check_file
+from math import ceil
 
 
 class Water:
     def __init__(
             self,
-            pa: Patch,
+            pa: list[Patch],
             *,
             frequency: Optional[tuple[int, int]] = (1, 20),
-            range: Optional[tuple[np.timedelta64, int]] = None
+            r: Optional[tuple[np.timedelta64, int]] = None
         ):
         self.pa: Patch = pa
         self.frequency: tuple = frequency
-        self.r = (range[0] - np.timedelta64(range[1], 's'), range[0] + np.timedelta64(range[1], 's')) if range != None else (self.pa.attrs.time_min, self.pa.attrs.time_min + np.timedelta64(10, 's'))
+        self.r = (r[0] - np.timedelta64(r[1], 's'), r[0] + np.timedelta64(r[1], 's')) if r != None else (self.pa.attrs.time_min, self.pa.attrs.time_min + np.timedelta64(10, 's'))
 
     def cut(self):
         return self.pa.select(time=self.r)
@@ -25,8 +26,9 @@ class Water:
     def process(self, pa: Patch) -> Patch:
         return (
             pa
-            .detrend(dim='time', type='constant')  # demean
-            .detrend(dim='time', type='linear')    # linear
+            .detrend(dim='time', type='constant') # demean
+            .detrend(dim='time', type='linear') # linear
+            .taper(time=0.01) # taper
             .pass_filter(time=self.frequency)
         )
 
@@ -35,29 +37,34 @@ class Fall:
             self,
             pa: Patch,
             *,
-            # y_factor: Optional[int] = 1,
-            name: Optional[str] = None
+            filename: Optional[list[str]] = None,
+            title: Optional[list[str]],
+            figsize: Optional[tuple[int, int]] = (24, 6)
         ):
         self.pa = pa
-        # self.y_factor = y_factor
-        self.name = name if name != None else "Figure"
+        self.pa_len = len(self.pa)
+        self.filename = filename if filename else ["Figure" for _ in range(self.pa_len)]
+        self.title = title if title else ["Waterfall Plot" for _ in range(self.pa_len)]
+        self.figsize = figsize
 
     def set_plot(self):
-        _, ax = plt.subplots(figsize=(12, 6))
+        nrows = int(self.pa_len**0.5)
+        ncols = int(ceil(self.pa_len/nrows))
+        self.fig, self.ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=self.figsize)
+        ax_flat = np.atleast_1d(self.ax).flatten()
 
-        self.pa.viz.waterfall(cmap="seismic", ax=ax, scale=0.3)
-
-        self.fig = plt.gcf()
-        cbar_ax = self.fig.axes[-1]
-        cbar_ax.set_ylabel("Amplitude", rotation=270, labelpad=15)
-
-        ax.invert_yaxis()
-
-        ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
-        ax.set_xlabel("Time (UTC)")
-
-        ax.set_title(f"Hole A {str(self.pa.attrs.time_min.astype("datetime64[m]")).replace('T', ' ')} Waterfall Plot")
-
+        for ax, pa, title in zip(ax_flat, self.pa, self.title):
+            # water fall
+            pa.viz.waterfall(cmap="seismic", ax=ax, scale=0.3)
+            # color bar
+            self.fig.axes[-1].set_ylabel("Amplitude", rotation=270, labelpad=15)
+            # upsidedown
+            ax.invert_yaxis()
+            # set x-axis
+            self.ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+            self.ax.set_xlabel("Time (UTC)")
+            # set title
+            ax.set_title(title)
 
     """
     def cut(self):
@@ -103,11 +110,9 @@ class Fall:
     """
 
     def waterfall_plot(self):
-        self.set_plot()
         plt.show()
 
     def waterfall_save(self):
-        self.set_plot()
         mkdir("image/")
-        plt.savefig(check_file(f"image/{self.name}.png"), dpi=200)
+        plt.savefig(check_file(f"image/{self.filename}.png"), dpi=200)
         plt.close(self.fig)

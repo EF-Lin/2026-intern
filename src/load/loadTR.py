@@ -23,19 +23,19 @@ def transfer(st: Stream, r: Optional[int] = 4) -> tuple[Patch, tuple[str, str]]:
     time = np.datetime64(st[0].stats.starttime.datetime) + np.arange(data.shape[1]) * np.timedelta64(int(st[0].stats.delta * 1e6), "us")
 
     fi = int(st[0].stats.station)
-    distance = np.array([])
+    depth = np.array([])
     stations = []
     for tr in st:
-        distance = np.append(distance, (int(tr.stats.station)-fi)*r)
+        depth = np.append(depth, (int(tr.stats.station)-fi)*r)
         stations.append(str(tr.stats.station))
 
     patch = Patch(
         data=data,
         coords={
             "time": time,
-            "distance": distance,
+            "depth": depth,
         },
-        dims=("distance", "time"),
+        dims=("depth", "time"),
     )
 
     return patch, (st[0].stats.station, st[-1].stats.station)
