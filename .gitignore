@@ -1,10 +1,12 @@
-t.py
-t/
-data_100Hz/
-data/
-tests/
+# settings
 .vscode/
-__pycache__/
-asset/
+
+# img
 image/
-20260728_data_100Hz/
+
+# python
+__pycache__/
+tests/
+
+t.py
+jp.py

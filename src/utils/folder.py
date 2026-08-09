@@ -1,4 +1,6 @@
 import os
+import string
+import random
 
 
 def mkdir(path: str) -> bool:
@@ -8,6 +10,13 @@ def mkdir(path: str) -> bool:
     else:
         return False
 
+def random_mkdir(parent: str='./') -> str:
+    path = parent + ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+    while os.path.exists(path):
+        path = parent + ''.join(random.choices(string.ascii_letters + string.digits, k=10))
+    path = os.path.normpath(path)
+    os.makedirs(path)
+    return path
 
 def check_file(path: str):
     path = os.path.normpath(path)
