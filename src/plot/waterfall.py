@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from typing import Optional, Any
 from math import ceil
+import io
 
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 # from matplotlib.colors import TwoSlopeNorm
+from PIL import Image
 
 from dascore import Patch
 
@@ -88,17 +90,18 @@ class Fall:
     """
     def __init__(
             self,
-            pa: list[Patch],
+            pa: Patch | list[Patch],
             *,
             filename: Optional[str] = None,
             title: Optional[list[str]] = None,
             figsize: Optional[tuple[int, int]] = (24, 6)
         ):
-        self.pa = pa
+        self.pa = pa if isinstance(pa, list) else [pa]
         self.pa_len = len(self.pa)
         self.filename = filename if filename else "Figure"
         self.title = title if title else ["Waterfall Plot" for _ in range(self.pa_len)]
         self.figsize = figsize
+        self.vrange = None
 
     def __str__(self):
         return f"{self.pa_len} Patches inside."
@@ -106,7 +109,7 @@ class Fall:
     def set_plot(self,
                  xname: str="Time (UTC)",
                  yname: str="depth",
-                 vrange: tuple = None,
+                 vrange: list[tuple] = None,
                  vertical: bool=True
         ) -> Fall:
         ncols = int(self.pa_len**0.5)
@@ -115,15 +118,16 @@ class Fall:
         if not vertical:
             ncols, nrows = nrows, ncols
 
-        fs = (self.figsize[0]*nrows, self.figsize[1]*ncols)
-
+        fs = (self.figsize[0]*ncols, self.figsize[1]*nrows)
         self.fig, self.ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=fs)
+
+        self.vrange = vrange if vrange else self.vrange
         ax_flat = np.atleast_1d(self.ax).flatten()
 
-        for ax, pa, title in zip(ax_flat, self.pa, self.title):
+        for i, (ax, pa, title) in enumerate(zip(ax_flat, self.pa, self.title)):
             # water fall
-            if vrange:
-                pa.viz.waterfall(cmap="seismic", ax=ax, vmin=vrange[0], vmax=vrange[1])
+            if self.vrange:
+                pa.viz.waterfall(cmap="seismic", ax=ax, scale=self.vrange[i], scale_type="absolute")
             else:
                 pa.viz.waterfall(cmap="seismic", ax=ax, scale=0.3)
             # color bar
@@ -137,8 +141,55 @@ class Fall:
             ax.set_ylabel(yname)
             # set title
             ax.set_title(title)
+            # layout
+            self.fig.tight_layout()
 
         return self
+
+    def gif(self, d: int=10, jump: int=100, dpi: int=200, frame: int=100, savimg: bool=False) -> None:
+        start = [pa.attrs.time_min for pa in self.pa]
+        end = [pa.attrs.time_max - np.timedelta64(d, 's') for pa in self.pa]
+
+        wa_li = [Water(pa) for pa in self.pa]
+
+        self.vrange = []
+        for pa in self.pa:
+            m = np.max([np.percentile(np.abs(papa.data), 95) for papa in pa.data])
+            self.vrange.append((-m, m))
+
+        if savimg:
+            k = 0
+            folder = mkdir(self.filename)
+
+        imgs = []
+        i = start[0]
+        while i <= end[0]:
+            self.pa = [wa.select(r=(t, t + np.timedelta64(d, 's'))) for wa, t in zip(wa_li, start)]
+            self.set_plot()
+            if savimg:
+                self.filename = str(k)
+                self.waterfall_save(folder=folder)
+                k += 1
+            buff = io.BytesIO()
+            plt.savefig(buff, format="jpg", dpi=dpi)
+            buff.seek(0)
+            imgs.append(Image.open(buff))
+            plt.close(self.fig)
+
+            start = [j + np.timedelta64(jump, 'ms') for j in start]
+            i = start[0]
+
+        self.pa = [wa.pa for wa in wa_li]
+
+        path = mkdir("./image")
+        imgs[0].save(
+            check_file(f"{path}/{self.filename}.gif"),
+            format="GIF",
+            save_all=True,
+            append_images=imgs[1:],
+            duration=frame,
+            loop=1
+        )
 
     """
     def cut(self):
@@ -188,5 +239,5 @@ class Fall:
 
     def waterfall_save(self, folder: str="image/", dpi: int=200):
         mkdir(folder)
-        plt.savefig(check_file(f"{folder}{self.filename}.png"), dpi=dpi)
+        plt.savefig(check_file(f"{folder}/{self.filename}.png"), dpi=dpi)
         plt.close(self.fig)
