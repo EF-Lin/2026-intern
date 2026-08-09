@@ -1,42 +1,91 @@
 from __future__ import annotations
 
+from typing import Optional, Any
+from math import ceil
+
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.dates as mdates
 # from matplotlib.colors import TwoSlopeNorm
+
 from dascore import Patch
-from typing import Optional
-from src.utils import mkdir, check_file
-from math import ceil
+
+from src.utils import (
+    mkdir,
+    check_file,
+    random_mkdir,
+    time_range_convt
+)
 
 
 class Water:
+    """
+    ### Cut and Process Patch
+    #### input
+    pa: Patch
+
+    frequency: filter frequency
+
+    #### method
+    cut: cut patch within a certain time range
+
+    select: return patch within a certain time range
+
+    process: process patch
+    """
     def __init__(
             self,
             pa: Patch,
             *,
             frequency: Optional[tuple[int, int]] = (1, 20),
-            r: Optional[tuple[np.timedelta64, int]] = None
         ):
         self.pa: Patch = pa
         self.frequency: tuple = frequency
-        self.r = (r[0] - np.timedelta64(r[1], 's'), r[0] + np.timedelta64(r[1], 's')) if r != None else (self.pa.attrs.time_min, self.pa.attrs.time_min + np.timedelta64(10, 's'))
+        self.shape = self.pa.data.shape
 
-    def cut(self) -> Water:
+    def __str__(self):
+        return f"{self.shape[0]}x{self.shape[1]} Array"
+
+    def cut(self, r: tuple[Any, Any] = None) -> Water:
+        self.r = time_range_convt(r)
         self.pa = self.pa.select(time=self.r)
         return self
 
-    def process(self) -> Patch:
+    def select(self, r: tuple[Any, Any] = None) -> Patch:
+        return self.pa.select(time=(r[0], r[1]))
+
+    def process(self) -> Water:
         self.pa = (self.pa
                    .detrend(dim='time', type='constant') # linear
                    .detrend(dim='time', type='linear') # demean
                    .taper(time=0.01) # taper
                    .pass_filter(time=self.frequency) # filter
-                   )
+        )
         return self
 
 
 class Fall:
+    """
+    ### Plot Waterfall figure
+    #### input
+    pa: Patch.
+
+    filename: output file name.
+
+    title: figure title.
+
+    figsize: single figure size.
+
+    #### method
+    set_plot: plot.
+
+    gif: genertate gif.
+
+    waterfall_plot: show plot.
+
+    waterfall_save; save png figure.
+
+    """
     def __init__(
             self,
             pa: list[Patch],
@@ -51,16 +100,32 @@ class Fall:
         self.title = title if title else ["Waterfall Plot" for _ in range(self.pa_len)]
         self.figsize = figsize
 
-    def set_plot(self, xname: str="Time (UTC)", yname: str="depth") -> Fall:
+    def __str__(self):
+        return f"{self.pa_len} Patches inside."
+
+    def set_plot(self,
+                 xname: str="Time (UTC)",
+                 yname: str="depth",
+                 vrange: tuple = None,
+                 vertical: bool=True
+        ) -> Fall:
         ncols = int(self.pa_len**0.5)
         nrows = int(ceil(self.pa_len/ncols))
 
-        self.fig, self.ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=self.figsize)
+        if not vertical:
+            ncols, nrows = nrows, ncols
+
+        fs = (self.figsize[0]*nrows, self.figsize[1]*ncols)
+
+        self.fig, self.ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=fs)
         ax_flat = np.atleast_1d(self.ax).flatten()
 
         for ax, pa, title in zip(ax_flat, self.pa, self.title):
             # water fall
-            pa.viz.waterfall(cmap="seismic", ax=ax, scale=0.3)
+            if vrange:
+                pa.viz.waterfall(cmap="seismic", ax=ax, vmin=vrange[0], vmax=vrange[1])
+            else:
+                pa.viz.waterfall(cmap="seismic", ax=ax, scale=0.3)
             # color bar
             self.fig.axes[-1].set_ylabel("Amplitude", rotation=270, labelpad=15)
             # upsidedown
@@ -121,7 +186,7 @@ class Fall:
     def waterfall_plot(self):
         plt.show()
 
-    def waterfall_save(self):
-        mkdir("image/")
-        plt.savefig(check_file(f"image/{self.filename}.png"), dpi=200)
+    def waterfall_save(self, folder: str="image/", dpi: int=200):
+        mkdir(folder)
+        plt.savefig(check_file(f"{folder}{self.filename}.png"), dpi=dpi)
         plt.close(self.fig)
