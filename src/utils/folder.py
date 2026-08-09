@@ -3,12 +3,11 @@ import string
 import random
 
 
-def mkdir(path: str) -> bool:
+def mkdir(path: str) -> str:
+    path = os.path.normpath(path)
     if not os.path.exists(path):
-        os.makedirs(os.path.normpath(path))
-        return True
-    else:
-        return False
+        os.makedirs(path)
+    return path
 
 def random_mkdir(parent: str='./') -> str:
     path = parent + ''.join(random.choices(string.ascii_letters + string.digits, k=10))

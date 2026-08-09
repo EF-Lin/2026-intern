@@ -14,7 +14,7 @@ def load_mini(files: list | str) -> Stream:
     return data
 
 
-def transfer(st: Stream, r: Optional[int] = 4) -> tuple[Patch, tuple[str, str]]:
+def transfer(st: Stream, r: Optional[int] = 4, start: int=0) -> tuple[Patch, tuple[str, str]]:
     st.trim(
         starttime=max([tr.stats.starttime for tr in st]),
         endtime=min([tr.stats.endtime for tr in st])
@@ -26,7 +26,7 @@ def transfer(st: Stream, r: Optional[int] = 4) -> tuple[Patch, tuple[str, str]]:
     depth = np.array([])
     stations = []
     for tr in st:
-        depth = np.append(depth, (int(tr.stats.station)-fi)*r)
+        depth = np.append(depth, start+(int(tr.stats.station)-fi)*r)
         stations.append(str(tr.stats.station))
 
     patch = Patch(

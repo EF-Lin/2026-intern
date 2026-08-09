@@ -17,7 +17,7 @@ def time_range_convt(date: tuple[Any, Any]) -> tuple[np.datetime64, np.datetime6
     replace = r"\1-\2-\3T\4:\5:\6"
     first = np.datetime64(re.sub(regex, replace, str(date[0])))
 
-    if isinstance(date[1], int):
+    if isinstance(date[1], (int, float)):
         ret_date = (first - np.timedelta64(date[1], 's'), first + np.timedelta64(date[1], 's'))
     else:
         ret_date = (first, np.datetime64(re.sub(regex, replace, str(date[1]))))
