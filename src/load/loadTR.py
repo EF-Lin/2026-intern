@@ -1,13 +1,17 @@
+from typing import Optional
+
+import numpy as np
+
 from obspy import read, Stream
 from dascore import Patch
-import numpy as np
-from typing import Optional
+
+from tqdm import tqdm
 
 
 def load_mini(files: list | str) -> Stream:
     data = Stream()
-    if type(files) == list:
-        for f in files:
+    if isinstance(files, list):
+        for f in tqdm(files, desc="Reading Data"):
             data += read(f)
     else:
         data = read(files)

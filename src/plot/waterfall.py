@@ -11,6 +11,7 @@ import matplotlib.dates as mdates
 from PIL import Image
 
 from dascore import Patch
+from tqdm import tqdm
 
 from src.utils import (
     mkdir,
@@ -167,6 +168,7 @@ class Fall:
 
         imgs = []
         i = start[0]
+        pbar = tqdm(total=((end[0] - start[0]).astype("timedelta64[s]").astype(int)+1)*1000/jump, desc="Generating GIF images")
         while i <= end[0]:
             self.pa = [wa.select(r=(t, t + np.timedelta64(d, 's'))) for wa, t in zip(wa_li, start)]
             self.set_plot()
@@ -177,12 +179,14 @@ class Fall:
             buff = io.BytesIO()
             plt.savefig(buff, format="jpg", dpi=dpi)
             buff.seek(0)
-            imgs.append(Image.open(buff))
+            imgs.append(Image.open(buff).convert("RGB"))
             plt.close(self.fig)
 
             start = [j + np.timedelta64(jump, 'ms') for j in start]
             i = start[0]
+            pbar.update(1)
 
+        pbar.close()
         self.pa = [wa.pa for wa in wa_li]
 
         imgs[0].save(
@@ -237,10 +241,12 @@ class Fall:
         plt.tight_layout()
     """
 
-    def waterfall_plot(self):
+    def waterfall_plot(self) -> Fall:
         plt.show()
+        return self
 
-    def waterfall_save(self, folder: str="image/", dpi: int=200):
+    def waterfall_save(self, folder: str="image/", dpi: int=200) -> Fall:
         mkdir(folder)
         plt.savefig(check_file(f"{folder}/{self.filename}.png"), dpi=dpi)
         plt.close(self.fig)
+        return self
