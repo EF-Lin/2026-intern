@@ -1,6 +1,6 @@
 import atexit
-from time import time
 from functools import wraps
+from time import time
 
 
 def timer(func):
@@ -9,4 +9,5 @@ def timer(func):
         start_time = time()
         atexit.register(lambda: print(f'Run time: {time() - start_time:.8f}'))
         return func(*args, **kwargs)
+
     return wapper

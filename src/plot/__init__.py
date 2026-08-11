@@ -1,8 +1,4 @@
 from .finger import Finger
-from .waterfall import Water, Fall
+from .waterfall import Fall, Water
 
-__all__ = [
-    "Finger",
-    "Water",
-    "Fall"
-]
+__all__ = ["Finger", "Water", "Fall"]

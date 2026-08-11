@@ -1,10 +1,8 @@
 from typing import Optional
 
 import numpy as np
-
-from obspy import read, Stream
 from dascore import Patch
-
+from obspy import Stream, read
 from tqdm import tqdm
 
 
@@ -18,19 +16,16 @@ def load_mini(files: list | str) -> Stream:
     return data
 
 
-def transfer(st: Stream, r: Optional[int] = 4, start: int=0) -> tuple[Patch, tuple[str, str]]:
-    st.trim(
-        starttime=max([tr.stats.starttime for tr in st]),
-        endtime=min([tr.stats.endtime for tr in st])
-    )
-    data = np.vstack([tr.data[:min([len(tr.data) for tr in st])] for tr in st])
+def transfer(st: Stream, r: Optional[int] = 4, start: int = 0) -> tuple[Patch, tuple[str, str]]:
+    st.trim(starttime=max([tr.stats.starttime for tr in st]), endtime=min([tr.stats.endtime for tr in st]))
+    data = np.vstack([tr.data[: min([len(tr.data) for tr in st])] for tr in st])
     time = np.datetime64(st[0].stats.starttime.datetime) + np.arange(data.shape[1]) * np.timedelta64(int(st[0].stats.delta * 1e6), "us")
 
     fi = int(st[0].stats.station)
     depth = np.array([])
     stations = []
     for tr in st:
-        depth = np.append(depth, start+(int(tr.stats.station)-fi)*r)
+        depth = np.append(depth, start + (int(tr.stats.station) - fi) * r)
         stations.append(str(tr.stats.station))
 
     patch = Patch(

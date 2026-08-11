@@ -3,12 +3,7 @@ from typing import Optional
 
 
 class Search:
-    def __init__(
-            self,
-            *,
-            folder: str,
-            filename: Optional[str] = "TW.{num}..S.D.2026.189"
-    ):
+    def __init__(self, *, folder: str, filename: Optional[str] = "TW.{num}..S.D.2026.189"):
         self.folder = os.path.normpath(folder)
         self.filename = filename
         self.folder_files: list = sorted(os.listdir(self.folder))
@@ -24,7 +19,7 @@ class Search:
     def multi_find(self, number: int, range: int) -> list[str]:
         try:
             start = self.filename.replace("{num}", f"{number:05d}")
-            end = self.filename.replace("{num}", f"{number+range:05d}")
+            end = self.filename.replace("{num}", f"{number + range:05d}")
             files = []
             flag = False
             for i in self.folder_files:

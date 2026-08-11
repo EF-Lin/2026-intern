@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from typing import Optional, Any
 import io
+from typing import Any, Optional
 
 import matplotlib.pyplot as plt
-from PIL import Image
 from obspy import Stream, UTCDateTime
+from PIL import Image
 from tqdm import tqdm
 
-from src.utils import mkdir, check_file
+from src.utils import check_file, mkdir
 
 
 class Finger:
@@ -30,17 +30,18 @@ class Finger:
 
     focus_save: save a png figure within a specific time period.
     """
+
     def __init__(
-            self,
-            st: Stream,
-            *,
-            #n: Optional[int] = 0,
-            frequency: Optional[tuple[int, int]] = (1, 20),
-            figsize: Optional[tuple[int, int]] = (24, 6),
+        self,
+        st: Stream,
+        *,
+        # n: Optional[int] = 0,
+        frequency: Optional[tuple[int, int]] = (1, 20),
+        figsize: Optional[tuple[int, int]] = (24, 6),
     ):
         self.st = st
         self._time_range = (self.st[0].stats.starttime, self.st[0].stats.starttime + 20)
-        #self.n = n
+        # self.n = n
         self.frequency = frequency
         self.figsize = figsize
 
@@ -63,13 +64,13 @@ class Finger:
         return self
 
     def cut(self) -> Finger:
-        self.st.trim(starttime=self._time_range[0], endtime=self._time_range[1]+1)
+        self.st.trim(starttime=self._time_range[0], endtime=self._time_range[1] + 1)
         return self
 
     def focus_plot(self):
         self.st.plot(starttime=self._time_range[0], endtime=self._time_range[1])
 
-    def focus_save(self, folder: str="/image"):
+    def focus_save(self, folder: str = "/image"):
         self.fig = plt.figure(figsize=self.figsize)
         folder = mkdir(folder)
         self.st.plot(
@@ -82,7 +83,7 @@ class Finger:
         )
         plt.close(self.fig)
 
-    def gif(self, d: int=10, jump: int=100, dpi: int=200, frame: int=100):
+    def gif(self, d: int = 10, jump: int = 100, dpi: int = 200, frame: int = 100):
         """
         d: sec
         jump, frame: ms
@@ -91,22 +92,16 @@ class Finger:
 
         imgs = []
         i = self._time_range[0]
-        pbar = tqdm(total=int((self.time_range[1] - self.time_range[0])*1000/jump), desc="Generating GIF images")
+        pbar = tqdm(total=int((self.time_range[1] - self.time_range[0]) * 1000 / jump), desc="Generating GIF images")
         while i <= (self._time_range[1] - d):
             buff = io.BytesIO()
             self.fig = plt.figure(figsize=self.figsize)
-            self.st.plot(
-                fig=self.fig,
-                starttime=i,
-                endtime=i+d,
-                outfile=buff,
-                dpi=dpi
-            )
+            self.st.plot(fig=self.fig, starttime=i, endtime=i + d, outfile=buff, dpi=dpi)
             buff.seek(0)
             imgs.append(Image.open(buff).convert("RGB"))
             plt.close(self.fig)
 
-            i += jump/1000
+            i += jump / 1000
             pbar.update(1)
         pbar.close()
 
@@ -116,5 +111,5 @@ class Finger:
             save_all=True,
             append_images=imgs[1:],
             duration=frame,
-            loop=1
+            loop=1,
         )
