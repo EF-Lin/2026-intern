@@ -15,7 +15,6 @@ from dascore import Patch
 from src.utils import (
     mkdir,
     check_file,
-    random_mkdir,
     time_range_convt
 )
 
@@ -147,6 +146,10 @@ class Fall:
         return self
 
     def gif(self, d: int=10, jump: int=100, dpi: int=200, frame: int=100, savimg: bool=False) -> None:
+        """
+        d: sec
+        jump, frame: ms
+        """
         start = [pa.attrs.time_min for pa in self.pa]
         end = [pa.attrs.time_max - np.timedelta64(d, 's') for pa in self.pa]
 
@@ -157,9 +160,10 @@ class Fall:
             m = np.max([np.percentile(np.abs(papa.data), 95) for papa in pa.data])
             self.vrange.append((-m, m))
 
+        path = mkdir("./image")
         if savimg:
             k = 0
-            folder = mkdir(self.filename)
+            folder = mkdir(f"{path}/{self.filename}")
 
         imgs = []
         i = start[0]
@@ -181,7 +185,6 @@ class Fall:
 
         self.pa = [wa.pa for wa in wa_li]
 
-        path = mkdir("./image")
         imgs[0].save(
             check_file(f"{path}/{self.filename}.gif"),
             format="GIF",

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
 from typing import Optional, Any
+import io
+
 import matplotlib.pyplot as plt
+from PIL import Image
+import numpy as np
 from obspy import Stream, UTCDateTime
 
 from src.utils import mkdir, check_file
@@ -30,16 +34,23 @@ class Finger:
             self,
             st: Stream,
             *,
-            r: Optional[float] = 10,
             #n: Optional[int] = 0,
             frequency: Optional[tuple[int, int]] = (1, 20),
-            figsize: Optional[tuple[int, int]] = (24, 6)
+            figsize: Optional[tuple[int, int]] = (24, 6),
     ):
         self.st = st
-        self.range = r
+        self._time_range = (self.st[0].stats.starttime, self.st[0].stats.starttime + 20)
         #self.n = n
         self.frequency = frequency
         self.figsize = figsize
+
+    @property
+    def time_range(self) -> tuple[UTCDateTime, UTCDateTime]:
+        return self._time_range
+
+    def set_time_range(self, focus_time: UTCDateTime | str | int | Any, r: Optional[int] = 10):
+        focus_time = UTCDateTime(focus_time)
+        self._time_range = (focus_time - r, focus_time + r)
 
     def __str__(self):
         return str(self.st[0].stats.station)
@@ -51,20 +62,54 @@ class Finger:
         self.st.filter("bandpass", freqmin=self.frequency[0], freqmax=self.frequency[1])
         return self
 
-    def focus_plot(self, focus_time: UTCDateTime | str | int | Any):
-        focus_time = UTCDateTime(focus_time)
-        self.st.plot(starttime=focus_time - self.range, endtime=focus_time + self.range)
+    def focus_plot(self):
+        self.st.plot(starttime=self._time_range[0], endtime=self._time_range[1])
 
-    def focus_save(self, focus_time: UTCDateTime | str | int | Any):
+    def focus_save(self, folder: str="/image"):
         self.fig = plt.figure(figsize=self.figsize)
-        focus_time = UTCDateTime(focus_time)
-        mkdir("/image")
+        folder = mkdir(folder)
         self.st.plot(
             fig=self.fig,
-            starttime=focus_time - self.range,
-            endtime=focus_time + self.range,
-            outfile=check_file(f"image/{UTCDateTime(focus_time - self.range).strftime("%Y-%m-%dT%H%M%S")}_to_{UTCDateTime(focus_time + self.range).strftime("%Y-%m-%dT%H%M%S")}_wave_plot-NS.png"),
+            starttime=self._time_range[0],
+            endtime=self._time_range[1],
+            outfile=check_file(f"{folder}/{self._time_range[0].strftime("%Y-%m-%dT%H%M%S")}_to_{self._time_range[1].strftime("%Y-%m-%dT%H%M%S")}_wave_plot.png"),
             dpi=200,
             # size=(5000, 750)
         )
         plt.close(self.fig)
+
+    def gif(self, d: int=10, jump: int=100, dpi: int=200, frame: int=100):
+        """
+        d: sec
+        jump, frame: ms
+        """
+        folder = mkdir("./image")
+
+        imgs = []
+        i = self._time_range[0]
+        while i <= (self._time_range[1] - d):
+            buff = io.BytesIO()
+            self.fig = plt.figure(figsize=self.figsize)
+            self.st.plot(
+                fig=self.fig,
+                starttime=i,
+                endtime=i+d,
+                outfile=buff,
+                dpi=dpi
+            )
+            buff.seek(0)
+            imgs.append(Image.open(buff))
+            plt.close(self.fig)
+
+            i += jump/1000
+            print(i)
+
+
+        imgs[0].save(
+            check_file(f"{folder}/{self._time_range[0].strftime("%Y-%m-%dT%H%M%S")}_to_{self._time_range[1].strftime("%Y-%m-%dT%H%M%S")}_wave_plot.png.gif"),
+            format="GIF",
+            save_all=True,
+            append_images=imgs[1:],
+            duration=frame,
+            loop=1
+        )
