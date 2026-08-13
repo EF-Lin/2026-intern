@@ -70,7 +70,7 @@ class Finger:
     def focus_plot(self):
         self.st.plot(starttime=self._time_range[0], endtime=self._time_range[1])
 
-    def focus_save(self, folder: str = "/image"):
+    def focus_save(self, folder: str = "./image"):
         self.fig = plt.figure(figsize=self.figsize)
         folder = mkdir(folder)
         self.st.plot(
@@ -92,7 +92,10 @@ class Finger:
 
         imgs = []
         i = self._time_range[0]
-        pbar = tqdm(total=int((self.time_range[1] - self.time_range[0]) * 1000 / jump), desc="Generating GIF images")
+        pbar = tqdm(
+            total=int((self._time_range[1] - d - self._time_range[0]) * 1000 / jump + 1),
+            desc="Generating GIF images",
+        )
         while i <= (self._time_range[1] - d):
             buff = io.BytesIO()
             self.fig = plt.figure(figsize=self.figsize)
@@ -106,7 +109,9 @@ class Finger:
         pbar.close()
 
         imgs[0].save(
-            check_file(f"{folder}/{self._time_range[0].strftime("%Y-%m-%dT%H%M%S")}_to_{self._time_range[1].strftime("%Y-%m-%dT%H%M%S")}_wave_plot.gif"),
+            check_file(
+                f"{folder}/{self._time_range[0].strftime("%Y-%m-%dT%H%M%S")}_to_{self._time_range[1].strftime("%Y-%m-%dT%H%M%S")}_wave_plot.gif"
+            ),
             format="GIF",
             save_all=True,
             append_images=imgs[1:],

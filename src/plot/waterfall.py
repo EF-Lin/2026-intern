@@ -162,7 +162,7 @@ class Fall:
         imgs = []
         i = start[0]
         pbar = tqdm(
-            total=((end[0] - start[0]).astype("timedelta64[s]").astype(int) + 1) * 1000 / jump,
+            total=((end[0] - start[0]).astype("timedelta64[s]").astype(int) - d) * 1000 / jump + 1,
             desc="Generating GIF images",
         )
         while i <= end[0]:
