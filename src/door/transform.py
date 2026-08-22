@@ -1,19 +1,10 @@
 from typing import Optional
 
 import numpy as np
-from dascore import Patch
-from obspy import Stream, read
-from tqdm import tqdm
+from dascore import Patch, write
+from obspy import Stream
 
-
-def load_mini(files: list | str) -> Stream:
-    data = Stream()
-    if isinstance(files, list):
-        for f in tqdm(files, desc="Reading Data"):
-            data += read(f)
-    else:
-        data = read(files)
-    return data
+from src.utils import check_file
 
 
 def transfer(st: Stream, r: Optional[int] = 4, start: int = 0) -> tuple[Patch, tuple[str, str]]:
@@ -38,3 +29,8 @@ def transfer(st: Stream, r: Optional[int] = 4, start: int = 0) -> tuple[Patch, t
     )
 
     return patch, (st[0].stats.station, st[-1].stats.station)
+
+
+def save(pa: Patch, name: str = "untitled") -> Patch:
+    write(check_file(f"{name}.h5"), file_format="dasdae")
+    return pa
