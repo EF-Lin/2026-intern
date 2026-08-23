@@ -57,4 +57,4 @@ def mini_2_h5():
 
 
 if __name__ == "__main__":
-    mini_2_h5()
+    draw()
