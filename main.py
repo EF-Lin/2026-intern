@@ -1,30 +1,29 @@
 import numpy as np
 from tqdm import tqdm
 
-from src.door import Search, load_csv, load_mini, transfer
+from src.door import Search, load_csv, load_mini, save, transfer
 from src.plot import Fall, Finger, Water
 from src.utils import timer
 
+se = Search(folder="data_100Hz")
+
+# times = load_csv("asset/78.csv")[:10]"2026-07-08T15:47:32"
+main = ["2026-07-08T15:47:32"]
+times = [
+    "2026-07-08T14:27:12",
+    "2026-07-08T15:38:54",
+    # main-eq
+    "2026-07-08T16:21:14",
+    "2026-07-08T19:27:34",
+    "2026-07-08T19:52:26",
+    "2026-07-08T19:53:03",
+    "2026-07-08T20:56:46",
+    "2026-07-08T21:28:10",
+]
+
 
 @timer
-def main():
-    se = Search(folder="data_100Hz")
-    # times = load_csv("asset/78.csv")[:10]"2026-07-08T15:47:32"
-    main = ["2026-07-08T15:47:32"]
-    times = [
-        "2026-07-08T14:27:12",
-        "2026-07-08T15:38:54",
-        # main-eq
-        "2026-07-08T16:21:14",
-        "2026-07-08T19:27:34",
-        "2026-07-08T19:52:26",
-        "2026-07-08T19:53:03",
-        "2026-07-08T20:56:46",
-        "2026-07-08T21:28:10",
-    ]
-    for i in times:
-        print(i.replace(':', ''))
-    exit()
+def draw():
     # 1559
     # st = load_mini(se.find(1565))
     # fi = Finger(st)
@@ -34,8 +33,6 @@ def main():
     # (1559, 25) N-S(1559, 5) NE-SW(1564, 7) SW-NE(1571, 7) E-W(1578, 6)
     st = load_mini(se.multi_find(1578, 6))  # 1213, 165
     pa, stations = transfer(st)  # , start=20
-
-    main.extend(times)
     for i in tqdm(main, desc="Generating Img"):
         t = np.datetime64(i)  # ["Time"]
         name = f"{stations[0]}_to_{stations[1]}_waterfall_plot_{i.replace(':', '')}"  # ["Time"]
@@ -47,12 +44,17 @@ def main():
 
         wa = Water(pa).cut(r=(t, 10)).process()
 
-        # fa = Fall([wa.pa], filename=name, title=[f"Hole A {str(wa.pa.attrs.time_min.astype("datetime64[m]")).#replace('T', ' ')} Waterfall Plot"], figsize=(18, 6))
         fa = Fall([wa.pa], filename=name, title=[f"{str(wa.pa.attrs.time_min.astype("datetime64[m]")).replace('T', ' ')} E-W Waterfall Plot"], figsize=(18, 2))
-        # fa = Fall([wa1.pa, wa2.pa], filename=name, title=["N-S Waterfall Plot", "E-W Waterfall Plot"], figsize=(18, 12))
         # fa.gif(d=10, dpi=150)
         fa.set_plot(yname="distance").waterfall_save()
 
 
+@timer
+def mini_2_h5():
+    st = load_mini(se.multi_find(1258, 120))
+    pa, stations = transfer(st, start=200)
+    save(pa, name=main[0])
+
+
 if __name__ == "__main__":
-    main()
+    mini_2_h5()

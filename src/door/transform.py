@@ -32,5 +32,5 @@ def transfer(st: Stream, r: Optional[int] = 4, start: int = 0) -> tuple[Patch, t
 
 
 def save(pa: Patch, name: str = "untitled") -> Patch:
-    write(check_file(f"{name}.h5"), file_format="dasdae")
+    write(pa, path=check_file(f"{name}.h5"), file_format="dasdae")
     return pa

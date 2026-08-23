@@ -20,6 +20,9 @@ def random_mkdir(parent: str = './') -> str:
 
 
 def check_file(path: str):
+    illegal = ['<', '>', ':', '"', '|', '?', '*']
+    for i in illegal:
+        path = path.replace(i, '')
     path = os.path.normpath(path)
     i = 1
     li = path.split('.')
