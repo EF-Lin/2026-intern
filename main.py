@@ -25,28 +25,27 @@ times = [
 @timer
 def draw():
     # 1559
-    # st = load_mini(se.find(1565))
-    # fi = Finger(st)
-    # fi = fi.process()
+    st = load_mini(se.find(1559))
+    fi = Finger(st)
+    fi = fi.process()
 
     # A (1208, 170) B (650, 122)
     # (1559, 25) N-S(1559, 5) NE-SW(1564, 7) SW-NE(1571, 7) E-W(1578, 6)
-    st = load_mini(se.multi_find(1578, 6))  # 1213, 165
-    pa, stations = transfer(st)  # , start=20
+    # st = load_mini(se.multi_find(1578, 6))  # 1213, 165
+    # pa, stations = transfer(st)  # , start=20
     for i in tqdm(main, desc="Generating Img"):
         t = np.datetime64(i)  # ["Time"]
-        name = f"{stations[0]}_to_{stations[1]}_waterfall_plot_{i.replace(':', '')}"  # ["Time"]
+        # name = f"{stations[0]}_to_{stations[1]}_waterfall_plot_{i.replace(':', '')}"  # ["Time"]
         # name = f"waterfall_plot_{i["Time"].replace(':', '')}"
 
-        # fi.set_time_range(i)  # ["Time"]
-        # fi.focus_save()
+        fi.set_time_range(i).focus_save(figsize=(30, 4))  # ["Time"]
         # fi.gif()
 
-        wa = Water(pa).cut(r=(t, 10)).process()
+        # wa = Water(pa).cut(r=(t, 10)).process()
 
-        fa = Fall([wa.pa], filename=name, title=[f"{str(wa.pa.attrs.time_min.astype("datetime64[m]")).replace('T', ' ')} E-W Waterfall Plot"], figsize=(18, 2))
+        # fa = Fall([wa.pa], filename=name, title=[f"{str(wa.pa.attrs.time_min.astype("datetime64[m]")).replace('T', ' ')} E-W Waterfall Plot"], figsize=(18, 2))
         # fa.gif(d=10, dpi=150)
-        fa.set_plot(yname="distance").waterfall_save()
+        # fa.set_plot(yname="distance").waterfall_save()
 
 
 @timer
