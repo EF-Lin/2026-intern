@@ -15,31 +15,14 @@ from tqdm import tqdm
 
 from src.utils import check_file, mkdir, time_range_convt
 
-# ---------------------------------------------------------------------------
-# Internal helper
-# ---------------------------------------------------------------------------
-
 
 def _resolve_scale(data: np.ndarray, scale) -> tuple[float, float]:
-    """
-    Resolve the *scale* argument into a concrete (vmin, vmax) pair.
-
-    Parameters
-    ----------
-    data:
-        The 2-D amplitude array.
-    scale:
-        * ``None``            – auto: ±95th-percentile of |data|
-        * ``float``           – relative: vmax = max(|data|) * scale
-        * ``(vmin, vmax)``    – absolute: use the tuple values directly
-    """
     if scale is None:
         v = float(np.percentile(np.abs(data), 95))
         return -v, v
     if isinstance(scale, (int, float)):
         v = float(np.max(np.abs(data))) * float(scale)
         return -v, v
-    # Assume sequence of length 2 → absolute
     return float(scale[0]), float(scale[1])
 
 
@@ -50,63 +33,30 @@ def _draw_waterfall(
     cmap: str = "seismic",
     cbar_label: str = "Amplitude",
 ) -> plt.Axes:
-    """
-    Draw a waterfall (time–space heatmap) on *ax* using pure matplotlib.
-
-    Parameters
-    ----------
-    ax:
-        Target axes.
-    pa:
-        dascore Patch.  Expected dims: ``(space_dim, "time")``.
-    scale:
-        Colour-scale control (see :func:`_resolve_scale`).
-    cmap:
-        Matplotlib colormap name.
-    cbar_label:
-        Label for the colour-bar.
-
-    Returns
-    -------
-    The same *ax* object.
-    """
     dims = pa.dims  # e.g. ("depth", "time")
 
     # Identify the space dimension (everything that is not "time")
     space_dim = next(d for d in dims if d != "time")
 
-    # --- Extract raw arrays ---
     time_arr = pa.coords.get_array("time")  # datetime64[ns]
     space_arr = pa.coords.get_array(space_dim)  # float (m)
     data = pa.data  # shape: (n_space, n_time)
 
-    # Transpose if needed so data is always (n_space, n_time) for imshow
     if dims.index(space_dim) != 0:
         data = data.T
 
-    # --- Convert datetime64 → matplotlib float ---
-    # date2num expects datetime-like; go through datetime64[ms] → object
     time_num = mdates.date2num(time_arr.astype("datetime64[ms]").astype("O"))
-    t_min, t_max = float(time_num[0]), float(time_num[-1])
 
-    # --- Extent ---
-    # origin="upper": row 0 is rendered at the TOP.
-    # data row 0 ↔ space_arr[0] (smallest depth/distance).
-    # extent = [left, right, bottom, top]
-    #   left / right  → x (time)
-    #   bottom / top  → y (space);  bottom = last space, top = first space
-    s_first, s_last = float(space_arr[0]), float(space_arr[-1])
-    extent = [t_min, t_max, s_last, s_first]
+    extent = [float(time_num[0]), float(time_num[-1]), float(space_arr[0]), float(space_arr[-1])]
 
-    # --- Colour scale ---
+    # Colour scale
     vmin, vmax = _resolve_scale(data, scale)
-    # Guard against degenerate case (all-zero data, etc.)
     if vmin >= vmax:
         vmax = max(abs(vmin), abs(vmax), 1e-9)
         vmin = -vmax
     norm = TwoSlopeNorm(vcenter=0.0, vmin=vmin, vmax=vmax)
 
-    # --- imshow ---
+    # imshow
     im = ax.imshow(
         data,
         extent=extent,
@@ -117,25 +67,17 @@ def _draw_waterfall(
         interpolation="antialiased",
     )
 
-    # --- Colour-bar ---
-    # Use make_axes_locatable so the colorbar is attached directly to the
-    # axes and shares its exact height, eliminating the right-side whitespace
-    # that fig.colorbar(im, ax=ax) produces.
+    # Colour-bar
     divider = make_axes_locatable(ax)
     cax = divider.append_axes("right", size="1%", pad=0.05)
     cbar = ax.get_figure().colorbar(im, cax=cax)
     cbar.set_label(cbar_label, rotation=270, labelpad=15)
 
-    # --- X-axis: format as HH:MM:SS ---
+    # X
     ax.xaxis_date()
     ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
 
     return ax
-
-
-# ---------------------------------------------------------------------------
-# Public classes
-# ---------------------------------------------------------------------------
 
 
 class Water:
@@ -235,29 +177,6 @@ class Fall:
         cmap: str = "seismic",
         vertical: bool = True,
     ) -> Fall:
-        """
-        Draw waterfall subplots for all patches.
-
-        Parameters
-        ----------
-        xname:
-            X-axis label.
-        yname:
-            Y-axis label.
-        scale:
-            Per-patch colour scale passed to :func:`_draw_waterfall`.
-            * ``None``          – auto (95th-percentile)
-            * ``float``         – relative (× max amplitude)
-            * ``(vmin, vmax)``  – absolute
-            Can also supply a *list* of the above, one per patch.
-        vrange:
-            **Deprecated** – kept for backward compatibility.  Equivalent to
-            passing a list of ``(vmin, vmax)`` tuples to *scale*.
-        cmap:
-            Matplotlib colormap name.
-        vertical:
-            If True, subplots are arranged vertically (more rows than cols).
-        """
         ncols = int(self.pa_len**0.5)
         nrows = int(ceil(self.pa_len / ncols))
 

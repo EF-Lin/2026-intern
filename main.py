@@ -1,7 +1,7 @@
 import numpy as np
 from tqdm import tqdm
 
-from src.door import Search, load_csv, load_mini, save, transfer
+from src.door import Search, load_csv, load_h5, load_mini, save, transfer
 from src.plot import Fall, Finger, Water
 from src.utils import timer
 
@@ -52,8 +52,19 @@ def draw():
 def mini_2_h5():
     st = load_mini(se.multi_find(1258, 120))
     pa, stations = transfer(st, start=200)
-    save(pa, name=main[0])
+    wa = Water(pa=pa).cut(("2026-07-08T15:17:32", "2026-07-08T16:17:32")).process()
+    save(wa.pa, name=main[0])
+
+
+@timer
+def pn():
+    from src.analysis import Phase
+
+    data = load_h5("2026-07-08T154732.h5")
+    phase = Phase()
+    picks = phase.run_patch(data).save()
+    print(picks)
 
 
 if __name__ == "__main__":
-    draw()
+    pn()
