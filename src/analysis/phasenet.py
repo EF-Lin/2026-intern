@@ -42,12 +42,12 @@ class Phase:
 
     def __init__(self, device: str = "cpu") -> None:
         try:
-            import DAS_ML as _DAS_ML
+            import DAS_ML
         except ModuleNotFoundError as exc:
             raise ModuleNotFoundError("DAS_ML is required for Phase but is not installed. Please install it and make sure it is on the Python path.") from exc
 
-        self._DAS_ML = _DAS_ML
-        _DAS_ML.preload_model(device=device)
+        DAS_ML.preload_model(device=device)
+        self._DAS_ML = DAS_ML
 
     def run_patch(
         self,

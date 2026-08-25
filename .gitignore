@@ -15,3 +15,5 @@ jp.py
 
 # data
 *.h5
+/asset
+/data_100Hz
