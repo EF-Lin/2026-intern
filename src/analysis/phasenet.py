@@ -61,14 +61,14 @@ class Phase:
         timestamp = UTCDateTime(t0_dt).strftime("%Y-%m-%dT%H:%M:%S.%f+00:00")
 
         if dt is None:
-            dt = float((time_arr[1] - time_arr[0]) / np.timedelta64(10, "ms"))
+            dt = float((time_arr[1] - time_arr[0]) / np.timedelta64(1, "s"))
 
         data = pa.data.astype(np.float32)
 
         self.picks = self._DAS_ML.phasenet_das(data, timestamp, ev_id, dt)
         return self
 
-    def save(self, name: str, *, folder: str = "picks") -> str:
+    def save(self, name: str = "picks.csv", *, folder: str = "picks") -> str:
         path = mkdir(folder)
         path = check_file(f"{path}/{name}")
         self.picks.to_csv(path, index=False)

@@ -25,4 +25,5 @@ def load_csv(path: str) -> list[dict]:
 
 def load_h5(path: str) -> dc.Patch:
     path = os.path.normpath(path)
-    return dc.read(path, "dasdae")
+    res = dc.read(path, "dasdae")
+    return res[0] if hasattr(res, "__getitem__") and not isinstance(res, dc.Patch) else res
