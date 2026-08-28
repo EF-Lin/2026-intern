@@ -1,9 +1,6 @@
 # settings
 .vscode/
 
-# img
-image/
-
 # python
 __pycache__/
 tests/
@@ -15,5 +12,8 @@ jp.py
 
 # data
 *.h5
-/asset
-/data_100Hz
+*.pth
+asset/
+data_100Hz/
+image/
+picks/

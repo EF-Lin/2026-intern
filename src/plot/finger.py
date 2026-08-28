@@ -117,8 +117,7 @@ class Finger:
 
         axes[-1].set_xlabel(xname)
 
-        # Lock x-axis to the *requested* time range so the waveform always
-        # fills the full window even if slice() trims a few samples at either end.
+        # Lock x-axis
         x_min = mdates.date2num(t0.datetime)
         x_max = mdates.date2num(t1.datetime)
         axes[0].set_xlim(x_min, x_max)  # sharex=True propagates to all subplots
@@ -141,9 +140,9 @@ class Finger:
         ylim:
             Y-axis limits applied to every subplot.
 
-            * ``None``        – auto (matplotlib default)
-            * ``float``       – symmetric: ``(-ylim, +ylim)``
-            * ``(lo, hi)``    – explicit lower / upper bound
+            * ``None``        - auto (matplotlib default)
+            * ``float``       - symmetric: ``(-ylim, +ylim)``
+            * ``(lo, hi)``    - explicit lower / upper bound
         xname:
             X-axis label.
         yname:
@@ -173,7 +172,7 @@ class Finger:
         folder:
             Output directory (created automatically if absent).
         ylim:
-            Y-axis limits – same semantics as :meth:`focus_plot`.
+            Y-axis limits - same semantics as :meth:`focus_plot`.
         xname:
             X-axis label.
         yname:
