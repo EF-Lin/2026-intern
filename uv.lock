@@ -18,6 +18,7 @@ dependencies = [
     { name = "dascore" },
     { name = "obspy" },
     { name = "pillow" },
+    { name = "scipy" },
     { name = "tqdm" },
 ]
 
@@ -26,6 +27,7 @@ requires-dist = [
     { name = "dascore", specifier = ">=0.1.20" },
     { name = "obspy", specifier = ">=1.5.0" },
     { name = "pillow", specifier = ">=12.3.0" },
+    { name = "scipy", specifier = ">=1.18.0" },
     { name = "tqdm", specifier = ">=4.70.0" },
 ]
 
