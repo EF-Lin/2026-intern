@@ -1,5 +1,5 @@
+from .figtools import patch2figdata, tr2array
 from .finger import Finger
-from .tools import patch2figdata
 from .waterfall import Fall, Water
 
 __all__ = [
@@ -7,4 +7,5 @@ __all__ = [
     "Water",
     "Fall",
     "patch2figdata",
+    "tr2array",
 ]

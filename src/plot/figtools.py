@@ -2,6 +2,7 @@ import matplotlib.dates as mdates
 import numpy as np
 from dascore import Patch
 from matplotlib.colors import TwoSlopeNorm
+from obspy import Trace
 
 
 def patch2figdata(
@@ -32,3 +33,14 @@ def patch2figdata(
 
     norm = TwoSlopeNorm(vcenter=0.0, vmin=vmin, vmax=vmax)
     return data, extent, norm
+
+
+def tr2array(tr: Trace) -> tuple[np.ndarray, np.ndarray]:
+    x = tr.data
+    y = mdates.date2num(
+        np.array(
+            [tr.stats.starttime.datetime + np.timedelta64(int(i * tr.stats.delta * 1e6), 'us') for i in range(tr.stats.npts)],
+            dtype="datetime64[us]",
+        ).astype('O')
+    )
+    return x, y
