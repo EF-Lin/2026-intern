@@ -220,7 +220,7 @@ class Fall:
             self.pa = [wa.select(r=(t, t + np.timedelta64(d, 's'))) for wa, t in zip(wa_li, start)]
             self.set_plot(**kwargs)
             buff = io.BytesIO()
-            plt.savefig(buff, format="jpg", dpi=dpi)
+            self.fig.savefig(buff, format="jpg", dpi=dpi)
             buff.seek(0)
             imgs.append(Image.open(buff).convert("RGB"))
             if savimg:
@@ -230,7 +230,7 @@ class Fall:
                 plt.close(self.fig)
 
             start = [j + np.timedelta64(jump, 'ms') for j in start]
-            i = start[0]
+            i = min(start)
             pbar.update(1)
 
         pbar.close()
@@ -257,6 +257,6 @@ class Fall:
         filename: str = "Figure",
     ) -> Self:
         mkdir(folder)
-        plt.savefig(check_file(f"{folder}/{filename}.png"), dpi=dpi)
+        self.fig.savefig(check_file(f"{folder}/{filename}.png"), dpi=dpi, bbox_inches="tight")
         plt.close(self.fig)
         return self

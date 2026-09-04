@@ -1,3 +1,5 @@
+from typing import Any
+
 import matplotlib.dates as mdates
 import numpy as np
 from dascore import Patch
@@ -35,7 +37,7 @@ def patch2figdata(
     return data, extent, norm
 
 
-def tr2array(tr: Trace) -> tuple[np.ndarray, np.ndarray]:
+def tr2array(tr: Trace, ylim: tuple | float | int) -> tuple[np.ndarray, np.ndarray, tuple | Any]:
     x = tr.data
     y = mdates.date2num(
         np.array(
@@ -43,4 +45,13 @@ def tr2array(tr: Trace) -> tuple[np.ndarray, np.ndarray]:
             dtype="datetime64[us]",
         ).astype('O')
     )
-    return x, y
+
+    if isinstance(ylim, tuple):
+        lim = tuple(sorted(ylim))
+    elif isinstance(ylim, (int, float)):
+        ylim = abs(ylim)
+        lim = (-ylim, ylim)
+    else:
+        lim = lim
+
+    return x, y, lim

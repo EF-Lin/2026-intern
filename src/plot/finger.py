@@ -1,16 +1,53 @@
 from __future__ import annotations
 
 import io
-from typing import Any, Optional
+from math import ceil
+from typing import Any, Optional, Self
 
 import matplotlib.dates as mdates
 import matplotlib.pyplot as plt
 import numpy as np
-from obspy import Stream, UTCDateTime
+from obspy import Stream, Trace, UTCDateTime
 from PIL import Image
 from tqdm import tqdm
 
-from src.utils import check_file, mkdir
+from src.plot import tr2array
+from src.utils import check_file, mkdir, obtime_range_convt
+
+
+def single_wave(
+    ax: plt.Axes,
+    tr: Trace,
+    time_range: tuple[UTCDateTime, UTCDateTime],
+    *,
+    ylim: tuple | float | int = None,
+    xname: str = "Time (UTC)",
+    yname: str = "Amplitude",
+    title: str = "Wave Plot",
+    linewidth: float = 0.6,
+    color: str = "black",
+) -> plt.Axes:
+    x, y, lim = tr2array(tr, ylim=ylim)
+
+    ax.plot(x, y, linewidth=linewidth, color=color)
+    ax.set_title(title)
+
+    # X
+    ax.xaxis_date()
+    ax.xaxis.set_major_formatter(mdates.DateFormatter("%H:%M:%S"))
+    ax.set_xlabel(xname)
+
+    # lock X
+    x_min = mdates.date2num(time_range[0].datetime)
+    x_max = mdates.date2num(time_range[1].datetime)
+    ax.set_xlim(x_min, x_max)
+
+    # Y
+    ax.set_ylabel(yname)
+    if lim is not None:
+        ax.set_ylim(lim[0], lim[1])
+
+    return ax
 
 
 class Finger:
@@ -36,59 +73,50 @@ class Finger:
     def __init__(
         self,
         st: Stream,
-        *,
-        # n: Optional[int] = 0,
-        frequency: Optional[tuple[int, int]] = (1, 20),
-        figsize: Optional[tuple[int, int]] = (24, 6),
     ):
         self.st = st
         self._time_range = (self.st[0].stats.starttime, self.st[0].stats.starttime + 20)
-        # self.n = n
-        self.frequency = frequency
-        self.figsize = figsize
+        self.st_len = len(self.st)
 
     @property
-    def time_range(self) -> tuple[UTCDateTime, UTCDateTime]:
-        return self._time_range
+    def time_range(self) -> tuple[str, str]:
+        return str(self._time_range[0]).split('.')[0], str(self._time_range[1]).split('.')[0]
 
-    def set_time_range(self, focus_time: UTCDateTime | str | int | Any, r: Optional[int] = 10) -> Finger:
-        self.focus_time = UTCDateTime(focus_time)
-        self._time_range = (self.focus_time - r, self.focus_time + r)
+    def set_time_range(self, r: tuple[Any, Any]) -> Self:
+        self._time_range = obtime_range_convt(r)
         return self
 
     def __str__(self):
         return str(self.st[0].stats.station)
 
-    def process(self) -> Finger:
+    def process(self, frequency: Optional[tuple[int, int]] = (1, 20)) -> Self:
         self.st.detrend("demean")
         self.st.detrend("linear")
         self.st.taper(max_percentage=0.05, type="hann")
-        self.st.filter("bandpass", freqmin=self.frequency[0], freqmax=self.frequency[1])
+        self.st.filter("bandpass", freqmin=frequency[0], freqmax=frequency[1])
         return self
 
-    def cut(self) -> Finger:
+    def cut(self) -> Self:
         self.st.trim(starttime=self._time_range[0], endtime=self._time_range[1] + 1)
         return self
+
+    def select(self) -> Stream:
+        return self.st.slice(starttime=self._time_range[0], endtime=self._time_range[1])
 
     def _build_fig(
         self,
         ylim: Optional[float | tuple[float, float]] = None,
         xname: str = "Time (UTC)",
         yname: str = "Amplitude",
-        figsize: Optional[tuple[int, int]] = None,
+        figsize: Optional[tuple[int, int]] = (24, 6),
     ) -> plt.Figure:
-        """
-        Internal helper: build a matplotlib Figure of per-trace waveforms
-        within the current time range.  Called by both :meth:`focus_plot`
-        and :meth:`focus_save`.
-        """
         t0 = self._time_range[0]
         t1 = self._time_range[1]
 
         st_view = self.st.slice(starttime=t0, endtime=t1)
         n = len(st_view)
 
-        fig, axes = plt.subplots(n, 1, figsize=figsize or self.figsize, sharex=True)
+        fig, axes = plt.subplots(n, 1, figsize=figsize, sharex=True)
         axes = np.atleast_1d(axes)
 
         # Resolve ylim
@@ -100,13 +128,9 @@ class Finger:
             y_lo, y_hi = float(ylim[0]), float(ylim[1])
 
         for ax, tr in zip(axes, st_view):
-            t_arr = np.array(
-                [tr.stats.starttime.datetime + np.timedelta64(int(i * tr.stats.delta * 1e6), 'us') for i in range(tr.stats.npts)],
-                dtype="datetime64[us]",
-            )
-            t_num = mdates.date2num(t_arr.astype("O"))
+            x, y = tr2array(tr)
 
-            ax.plot(t_num, tr.data, linewidth=0.6, color="black")
+            ax.plot(x, y, linewidth=0.6, color="black")
             ax.set_ylabel(f"{tr.id}\n{yname}", fontsize=8)
 
             if y_lo is not None:
@@ -125,72 +149,50 @@ class Finger:
         fig.tight_layout()
         return fig
 
-    def focus_plot(
+    def set_plot(
         self,
-        ylim: Optional[float | tuple[float, float]] = None,
-        xname: str = "Time (UTC)",
-        yname: str = "Amplitude",
-        figsize: Optional[tuple[int, int]] = None,
-    ) -> Finger:
-        """
-        Draw the waveform of every trace within the current time range.
+        vertical: bool = True,
+        figsize: Optional[tuple[int, int]] = (24, 6),
+        title: Optional[list[str]] | str = None,
+        **kwargs,
+    ) -> Self:
+        if isinstance(title, str):
+            fig_title = [title for _ in range(self.pa_len)]
+        elif title:
+            fig_title = title
+        else:
+            fig_title = ["Waterfall Plot" for _ in range(self.pa_len)]
 
-        Parameters
-        ----------
-        ylim:
-            Y-axis limits applied to every subplot.
+        ncols = int(self.st_len**0.5)
+        nrows = int(ceil(self.st_len / ncols))
 
-            * ``None``        - auto (matplotlib default)
-            * ``float``       - symmetric: ``(-ylim, +ylim)``
-            * ``(lo, hi)``    - explicit lower / upper bound
-        xname:
-            X-axis label.
-        yname:
-            Y-axis label (shared).
-        figsize:
-            Figure size ``(width, height)`` in inches.
-            Defaults to the value set at construction time.
-        """
-        self.fig = self._build_fig(ylim=ylim, xname=xname, yname=yname, figsize=figsize)
-        plt.show()
+        if not vertical:
+            ncols, nrows = nrows, ncols
+
+        fs = (figsize[0] * ncols, figsize[1] * nrows)
+        self.fig, self.ax = plt.subplots(nrows=nrows, ncols=ncols, figsize=fs)
+        ax_flat = np.atleast_1d(self.ax).flatten()
+
+        for ax, tr, ti in zip(ax_flat, self.st, fig_title):
+            single_wave(ax, tr, time_range=self._time_range, title=ti, **kwargs)
+
+        for ax in ax_flat[self.pa_len :]:
+            ax.set_visible(False)
+
+        self.fig.tight_layout()
         return self
 
-    def focus_save(
+    def _gif(
         self,
-        folder: str = "./image",
-        ylim: Optional[float | tuple[float, float]] = None,
-        xname: str = "Time (UTC)",
-        yname: str = "Amplitude",
+        *,
+        d: int = 10,
+        jump: int = 100,
         dpi: int = 200,
-        figsize: Optional[tuple[int, int]] = None,
-    ) -> Finger:
-        """
-        Save the waveform figure to a PNG file.
-
-        Parameters
-        ----------
-        folder:
-            Output directory (created automatically if absent).
-        ylim:
-            Y-axis limits - same semantics as :meth:`focus_plot`.
-        xname:
-            X-axis label.
-        yname:
-            Y-axis label (shared).
-        dpi:
-            Resolution of the saved image.
-        figsize:
-            Figure size ``(width, height)`` in inches.
-            Defaults to the value set at construction time.
-        """
-        folder = mkdir(folder)
-        self.fig = self._build_fig(ylim=ylim, xname=xname, yname=yname, figsize=figsize)
-        path = check_file(f"{folder}/{self.focus_time.strftime('%Y-%m-%dT%H%M%S')}_wave_plot.png")
-        self.fig.savefig(path, dpi=dpi, bbox_inches="tight")
-        plt.close(self.fig)
-        return self
-
-    def gif(self, d: int = 10, jump: int = 100, dpi: int = 200, frame: int = 100):
+        frame: int = 100,
+        savimg: bool = False,
+        filename: str = "Figure_gif",
+        **kwargs,
+    ) -> Self:
         """
         d: sec
         jump, frame: ms
@@ -204,8 +206,8 @@ class Finger:
             desc="Generating GIF images",
         )
         while i <= (self._time_range[1] - d):
+            self.set_plot(**kwargs)
             buff = io.BytesIO()
-            self.fig = plt.figure(figsize=self.figsize)
             self.st.plot(fig=self.fig, starttime=i, endtime=i + d, outfile=buff, dpi=dpi)
             buff.seek(0)
             imgs.append(Image.open(buff).convert("RGB"))
@@ -223,3 +225,20 @@ class Finger:
             duration=frame,
             loop=1,
         )
+
+    def focus_plot(self) -> Self:
+        plt.show()
+        return self
+
+    def focus_save(
+        self,
+        *,
+        folder: str = "./image",
+        dpi: int = 300,
+        filename: str = None,
+    ) -> Self:
+        filename = f"{self._time_range.strftime("%Y-%m-%dT%H%M%S")}_wave_plot" if filename is None else filename
+        folder = mkdir(folder)
+        self.fig.savefig(check_file(f"{folder}/{filename}.png"), dpi=dpi, bbox_inches="tight")
+        plt.close(self.fig)
+        return self
