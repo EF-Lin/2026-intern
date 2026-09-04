@@ -12,8 +12,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from PIL import Image
 from tqdm import tqdm
 
-from src.plot import patch2figdata
-from src.utils import check_file, mkdir, nptime_range_convt
+from src.utils import check_file, mkdir, nptime_range_convt, patch2figdata
 
 
 def single_waterfall(

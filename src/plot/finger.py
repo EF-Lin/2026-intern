@@ -11,8 +11,7 @@ from obspy import Stream, Trace, UTCDateTime
 from PIL import Image
 from tqdm import tqdm
 
-from src.plot import tr2array
-from src.utils import check_file, mkdir, obtime_range_convt
+from src.utils import check_file, mkdir, obtime_range_convt, tr2array
 
 
 def single_wave(
