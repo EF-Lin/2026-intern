@@ -25,9 +25,14 @@ class CC:
     def calculate(self) -> Self:
         for g in self.compare:
             cor, lag = self(self.main, g)
+            cor = cor / np.sqrt(np.sum(self.main**2) * np.sum(g**2))
             self.correlation.append(cor)
             self.lags.append(lag)
         return self
 
-    def pick(self):
-        pass
+    def pick(self) -> list[dict]:
+        ret = []
+        for i, j in zip(self.correlation, self.lags):
+            cor_index = int(np.argmax(i))
+            ret.append({"correlation": i[cor_index], "lags": j[cor_index]})
+        return ret
