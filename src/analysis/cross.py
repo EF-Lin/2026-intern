@@ -18,6 +18,9 @@ class CC:
         self.lags = []
 
     def __call__(self, f: np.ndarray, g: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        f = np.asarray(f).flatten()
+        g = np.asarray(g).flatten()
+
         correlation = signal.correlate(f, g, method="auto")
         lags = signal.correlation_lags(len(f), len(g))
         return correlation, lags

@@ -37,9 +37,9 @@ def patch2figdata(
     return data, extent, norm
 
 
-def tr2array(tr: Trace, ylim: tuple | float | int) -> tuple[np.ndarray, np.ndarray, tuple | Any]:
-    x = tr.data
-    y = mdates.date2num(
+def tr2array(tr: Trace, ylim: tuple | float | int | None = None) -> tuple[np.ndarray, np.ndarray, tuple | Any]:
+    y = tr.data
+    x = mdates.date2num(
         np.array(
             [tr.stats.starttime.datetime + np.timedelta64(int(i * tr.stats.delta * 1e6), 'us') for i in range(tr.stats.npts)],
             dtype="datetime64[us]",
@@ -52,6 +52,6 @@ def tr2array(tr: Trace, ylim: tuple | float | int) -> tuple[np.ndarray, np.ndarr
         ylim = abs(ylim)
         lim = (-ylim, ylim)
     else:
-        lim = lim
+        lim = None
 
     return x, y, lim

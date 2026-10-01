@@ -127,7 +127,7 @@ class Finger:
             y_lo, y_hi = float(ylim[0]), float(ylim[1])
 
         for ax, tr in zip(axes, st_view):
-            x, y = tr2array(tr)
+            x, y, _ = tr2array(tr, ylim=None)
 
             ax.plot(x, y, linewidth=0.6, color="black")
             ax.set_ylabel(f"{tr.id}\n{yname}", fontsize=8)
@@ -156,11 +156,11 @@ class Finger:
         **kwargs,
     ) -> Self:
         if isinstance(title, str):
-            fig_title = [title for _ in range(self.pa_len)]
+            fig_title = [title for _ in range(self.st_len)]
         elif title:
             fig_title = title
         else:
-            fig_title = ["Waterfall Plot" for _ in range(self.pa_len)]
+            fig_title = ["Wave Plot" for _ in range(self.st_len)]
 
         ncols = int(self.st_len**0.5)
         nrows = int(ceil(self.st_len / ncols))
@@ -175,7 +175,7 @@ class Finger:
         for ax, tr, ti in zip(ax_flat, self.st, fig_title):
             single_wave(ax, tr, time_range=self._time_range, title=ti, **kwargs)
 
-        for ax in ax_flat[self.pa_len :]:
+        for ax in ax_flat[self.st_len :]:
             ax.set_visible(False)
 
         self.fig.tight_layout()
