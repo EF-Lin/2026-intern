@@ -20,12 +20,14 @@ def random_mkdir(parent: str = './') -> str:
 
 
 def check_file(path: str):
+    drive, tail = os.path.splitdrive(path)
     illegal = ['<', '>', ':', '"', '|', '?', '*']
     for i in illegal:
-        path = path.replace(i, '')
-    path = os.path.normpath(path)
+        tail = tail.replace(i, '')
+    path = os.path.normpath(drive + tail)
     i = 1
     li = path.split('.')
+
     while os.path.exists(path):
         path = f"{''.join(li[:-1])} ({i}).{li[-1]}"
         i += 1
