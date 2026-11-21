@@ -1,0 +1,73 @@
+# data.py / plot_*_hist.py 使用的設定
+# 光纖段落以 (起始測站, 測站數) 表示，對應 Search.multi_find(station, n)
+
+[search]
+folder = "data_100Hz"
+
+[events]
+main = ["2026-07-08T15:47:32"]
+times = [
+    "2026-07-08T14:27:12",
+    "2026-07-08T15:38:54",
+    "2026-07-08T16:21:14",
+    "2026-07-08T19:27:34",
+    "2026-07-08T19:52:26",
+    "2026-07-08T19:53:03",
+    "2026-07-08T20:56:46",
+    "2026-07-08T21:28:10",
+]
+fk_csv = "asset/ups.csv"
+
+[segments]
+A = { station = 1208, n = 170 }
+B = { station = 650, n = 122 }
+full = { station = 1559, n = 25 }
+N-S = { station = 1559, n = 5 }
+NE-SW = { station = 1564, n = 7 }
+SW-NE = { station = 1571, n = 7 }
+E-W = { station = 1578, n = 6 }
+fk = { station = 1213, n = 165 }
+h5 = { station = 1258, n = 120 }
+
+[draw]
+station = 1559
+figsize = [30, 4]
+
+[mini_2_h5]
+segment = "h5"
+start = 200
+
+[pn]
+h5 = "2026-07-08T154732.h5"
+
+[fk]
+segment = "fk"
+start = 20
+cut = 2
+
+[compareAB]
+station_a = 1333
+station_b = 772
+start = 500
+cut = 2
+output = "image/data.csv"
+
+[hist]
+csv = "image/data.csv"
+highlight_time = "2026-07-08T15:47:32"
+
+[hist.lags_AB]
+binwidth = 10
+symbol = "lags"
+fmt = ".0f"
+xlabel = "Lags (10 ms)"
+title = "Distribution of Lags$_{AB}$"
+output = "image/lags_AB_histogram.png"
+
+[hist.v_ap]
+binwidth = 100
+symbol = "$v_{ap}$"
+unit = "m/s"
+xlabel = "Apparent Velocity $v_{ap}$ (m/s)"
+title = "Distribution of Apparent Velocities"
+output = "image/v_ap_histogram_sci-t.png"

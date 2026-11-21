@@ -1,8 +1,9 @@
+from .config import load_config
 from .convert import nptime_range_convt, obtime_range_convt
 from .figtools import patch2figdata, tr2array
 from .folder import check_file, mkdir, random_mkdir
 from .saving import dicts2csv
-from .timimg import timer
+from .timing import timer
 
 __all__ = [
     "mkdir",
@@ -14,5 +15,6 @@ __all__ = [
     "patch2figdata",
     "tr2array",
     "dicts2csv",
+    "load_config",
 ]
 

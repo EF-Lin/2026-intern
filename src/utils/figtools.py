@@ -39,12 +39,9 @@ def patch2figdata(
 
 def tr2array(tr: Trace, ylim: tuple | float | int | None = None) -> tuple[np.ndarray, np.ndarray, tuple | Any]:
     y = tr.data
-    x = mdates.date2num(
-        np.array(
-            [tr.stats.starttime.datetime + np.timedelta64(int(i * tr.stats.delta * 1e6), 'us') for i in range(tr.stats.npts)],
-            dtype="datetime64[us]",
-        ).astype('O')
-    )
+    t0 = np.datetime64(tr.stats.starttime.datetime, "us")
+    offsets = (np.arange(tr.stats.npts) * tr.stats.delta * 1e6).astype(np.int64).astype("timedelta64[us]")
+    x = mdates.date2num(t0 + offsets)
 
     if isinstance(ylim, tuple):
         lim = tuple(sorted(ylim))

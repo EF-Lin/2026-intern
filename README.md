@@ -1,4 +1,4 @@
-# 2026 INTREN
+# 2026 INTERN
 A project aim to process DAS (Distributed Acoustic Sensing, 分散式光纖聲學感測) data. Specially designed for MiDAS data.
 
 ## Features
@@ -19,18 +19,48 @@ uv sync
 ```
 
 ## Usage
+All parameters (data folder, event times, fiber segments, per-task settings) live in `config.toml`.
 
+```bash
+uv run python data.py            # run the task selected in data.py's __main__ (draw / mini_2_h5 / pn / fk / compareAB)
+uv run python plot_lags_hist.py  # histogram of lags_AB from image/data.csv
+uv run python plot_vap_hist.py   # histogram of v_ap from image/data.csv
+```
+
+Library usage:
+```python
+from src.door import Search, load_mini, transfer
+from src.plot import Fall, Finger, Water
+
+se = Search(folder="data_100Hz")
+fi = Finger(load_mini(se.find(1559))).process()
+fi.set_time_range("2026-07-08T15:47:32").focus_save()
+
+pa, stations = transfer(load_mini(se.multi_find(1578, 6)), start=20)
+wa = Water(pa).cut(("2026-07-08T15:47:32", 10)).process()
+Fall(wa.pa).set_plot(yname="distance").waterfall_save()
+```
+
+Run tests:
+```bash
+uv run pytest
+```
+
+PhaseNet-DAS (`src.analysis.Phase`) additionally requires `DAS_ML`, which is not on PyPI.
 
 ## Project Structure
 ```bash
 .
 ├── src/
-│   ├── analysis/ # Analyze data
-│   ├── load/     # Load and transform data
-│   ├── plot/     # Generate figure
-│   └── utils/    # Other tools
-├── main.py       # Directly run the program
-└── __main__.py   # Allow users to use CLI interface
+│   ├── analysis/     # Analyze data (cross correlation, PhaseNet DAS)
+│   ├── door/         # Search, load and transform data
+│   ├── plot/         # Generate figures (wave, waterfall, f-k, histogram)
+│   └── utils/        # Other tools
+├── config.toml       # Event times, fiber segments and task parameters
+├── tests/
+├── data.py           # Processing tasks
+├── example.py        # Usage example
+└── plot_*_hist.py    # Histogram scripts
 ```
 
 ## Major Logs
@@ -40,3 +70,4 @@ uv sync
 - 2026/08/09, GIF feature
 - 2026/08/24, Collaborate with AI(Claude)
 - 2026/08/25, PhaseNet DAS feature
+- 2026/08/29, Cross correlation feature

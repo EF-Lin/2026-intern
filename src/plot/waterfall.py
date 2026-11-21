@@ -121,8 +121,8 @@ class Fall:
 
     - title: figure title, list or string
     - figsize: single figure size, tuple
-    - scale: color bar limit, float ot tuple
-    - cmap: defaule value "seismic", string
+    - scale: color bar limit, float or tuple
+    - cmap: default value "seismic", string
     - cname: color bar name, string
     - xname: x-axis name, string
     - yname: y-axis name, string
@@ -130,8 +130,8 @@ class Fall:
     gif: generate gif
     - title: figure title, string
     - figsize: single figure size, tuple
-    - scale: color bar limit, float ot tuple
-    - cmap: defaule value "seismic", string
+    - scale: color bar limit, float or tuple
+    - cmap: default value "seismic", string
     - cname: color bar name, string
     - xname: x-axis name, string
     - yname: y-axis name, string
@@ -212,7 +212,7 @@ class Fall:
         imgs = []
         i = start[0]
         pbar = tqdm(
-            total=((min(end) - min(start)).astype("timedelta64[ms]").astype(int)) * 1000 / jump + 1,
+            total=int((min(end) - min(start)).astype("timedelta64[ms]").astype(int) / jump) + 1,
             desc="Generating GIF images",
         )
         while i <= min(end):

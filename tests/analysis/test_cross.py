@@ -106,3 +106,41 @@ def test_pick(
     for pick, expected in zip(picks, expected_picks):
         assert pick["correlation"] == pytest.approx(expected["correlation"])
         assert pick["lags"] == expected["lags"]
+
+
+def test_calculate_resets_between_calls() -> None:
+    cc = CC(np.array([1.0, 2.0, 3.0]), [np.array([1.0, 2.0, 3.0]), np.array([3.0, 2.0, 1.0])])
+    cc.calculate()
+    cc.calculate()
+    assert len(cc.correlation) == 2
+    assert len(cc.lags) == 2
+    assert len(cc.pick()) == 2
+
+
+def test_single_channel_2d_matches_1d() -> None:
+    f = np.array([0.0, 0.0, 0.0, 10.0, 0.0, 0.0])
+    g = np.array([0.0, 10.0, 0.0, 0.0, 0.0, 0.0])
+    p1 = CC(f, [g]).calculate().pick()
+    p2 = CC(f[np.newaxis, :], [g[np.newaxis, :]]).calculate().pick()
+    assert p1[0]["lags"] == p2[0]["lags"] == 2
+    assert p1[0]["correlation"] == pytest.approx(p2[0]["correlation"])
+
+
+@pytest.mark.parametrize(
+    "main, compare",
+    [
+        (np.ones((3, 10)), [np.ones(10)]),
+        (np.ones(10), [np.ones((2, 10))]),
+    ],
+)
+def test_multichannel_rejected(main: np.ndarray, compare: list[np.ndarray]) -> None:
+    with pytest.raises(ValueError):
+        CC(main, compare).calculate()
+
+
+def test_pick_with_dt() -> None:
+    cc = CC(np.array([0, 0, 0, 10, 0, 0]), [np.array([0, 10, 0, 0, 0, 0])]).calculate()
+    pick = cc.pick(dt=0.01)[0]
+    assert pick["lags"] == 2
+    assert pick["lag_seconds"] == pytest.approx(0.02)
+    assert "lag_seconds" not in cc.pick()[0]

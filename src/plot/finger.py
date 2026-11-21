@@ -81,8 +81,15 @@ class Finger:
     def time_range(self) -> tuple[str, str]:
         return str(self._time_range[0]).split('.')[0], str(self._time_range[1]).split('.')[0]
 
-    def set_time_range(self, r: tuple[Any, Any]) -> Self:
-        self._time_range = obtime_range_convt(r)
+    def set_time_range(self, r: tuple[Any, Any] | Any, d: float = 10) -> Self:
+        """
+        r: (time, range(s)) | (time, time) | time
+
+        A single time is expanded to (time - d, time + d).
+        """
+        if not isinstance(r, (tuple, list)):
+            r = (r, d)
+        self._time_range = obtime_range_convt(tuple(r))
         return self
 
     def __str__(self):
@@ -216,6 +223,9 @@ class Finger:
             pbar.update(1)
         pbar.close()
 
+        if not imgs:
+            raise ValueError("No frames generated: time range is shorter than d.")
+
         imgs[0].save(
             check_file(f"{folder}/{self._time_range[0].strftime("%Y-%m-%dT%H%M%S")}_to_{self._time_range[1].strftime("%Y-%m-%dT%H%M%S")}_wave_plot.gif"),
             format="GIF",
@@ -224,8 +234,15 @@ class Finger:
             duration=frame,
             loop=1,
         )
+        return self
 
-    def focus_plot(self) -> Self:
+    def _ensure_fig(self, figsize: Optional[tuple[int, int]], **kwargs) -> None:
+        """Build the focus figure if none exists yet, or rebuild it when figsize/kwargs are given."""
+        if figsize is not None or kwargs or getattr(self, "fig", None) is None:
+            self.fig = self._build_fig(figsize=figsize or (24, 6), **kwargs)
+
+    def focus_plot(self, *, figsize: Optional[tuple[int, int]] = None, **kwargs) -> Self:
+        self._ensure_fig(figsize, **kwargs)
         plt.show()
         return self
 
@@ -235,9 +252,18 @@ class Finger:
         folder: str = "./image",
         dpi: int = 300,
         filename: str = None,
+        figsize: Optional[tuple[int, int]] = None,
+        **kwargs,
     ) -> Self:
-        filename = f"{self._time_range.strftime("%Y-%m-%dT%H%M%S")}_wave_plot" if filename is None else filename
+        """
+        Save the current figure. If no figure exists (or figsize/kwargs are given),
+        a stacked per-trace figure of the current time range is built first.
+        kwargs are passed to _build_fig (ylim, xname, yname).
+        """
+        self._ensure_fig(figsize, **kwargs)
+        filename = f"{self._time_range[0].strftime("%Y-%m-%dT%H%M%S")}_wave_plot" if filename is None else filename
         folder = mkdir(folder)
         self.fig.savefig(check_file(f"{folder}/{filename}.png"), dpi=dpi, bbox_inches="tight")
         plt.close(self.fig)
+        self.fig = None
         return self

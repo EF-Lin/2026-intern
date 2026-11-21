@@ -132,7 +132,7 @@ class Folk:
         self.info: list[dict] = []
 
     def __str__(self):
-        return self.info
+        return str(self.info)
 
     def set_plot(
         self,

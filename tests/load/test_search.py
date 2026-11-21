@@ -41,3 +41,45 @@ def test_find(sear: Search, n: int, expected: str) -> None:
 )
 def test_multi_find(sear: Search, n: int, r: int, expected: list[str]) -> None:
     assert sear.multi_find(n, r) == expected
+
+
+@pytest.fixture
+def fake_folder(tmp_path):
+    for name in ["TW.00010..S.D.2026.189", "TW.00010..S.D.2026.209", "TW.00010..S.D.2025.009", "TW.00011..S.D.2025.009"]:
+        (tmp_path / name).touch()
+    return tmp_path
+
+
+def test_default_filename(fake_folder) -> None:
+    se = Search(folder=str(fake_folder))
+    assert se.find(10).endswith("TW.00010..S.D.2026.189")
+
+
+def test_year_julday(fake_folder) -> None:
+    se = Search(folder=str(fake_folder), year=2025, julday=9)
+    assert [p[-22:] for p in se.multi_find(10, 1)] == ["TW.00010..S.D.2025.009", "TW.00011..S.D.2025.009"]
+
+
+@pytest.mark.parametrize(
+    "date",
+    [
+        __import__("datetime").date(2026, 7, 28),
+        __import__("obspy").UTCDateTime(2026, 7, 28, 12, 0, 0),
+    ],
+)
+def test_date(fake_folder, date) -> None:
+    se = Search(folder=str(fake_folder), date=date)
+    assert se.find(10).endswith("TW.00010..S.D.2026.209")
+
+
+def test_fixed_filename_still_works(fake_folder) -> None:
+    se = Search(folder=str(fake_folder), filename="TW.{num}..S.D.2026.209", year=1999)
+    assert se.find(10).endswith("TW.00010..S.D.2026.209")
+
+
+def test_missing_with_date(fake_folder) -> None:
+    se = Search(folder=str(fake_folder), year=2024, julday=1)
+    with pytest.raises(FileNotFoundError):
+        se.find(10)
+    with pytest.raises(FileNotFoundError):
+        se.multi_find(10, 1)

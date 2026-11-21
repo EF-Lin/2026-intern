@@ -7,11 +7,23 @@ readme = "README.md"
 keywords = []
 dependencies = [
     "dascore>=0.1.20",
+    "matplotlib>=3.11.1",
     "obspy>=1.5.0",
+    "pandas>=3.0.5",
     "pillow>=12.3.0",
     "scipy>=1.18.0",
+    "seaborn>=0.13.2",
     "tqdm>=4.70.0",
 ]
+
+[project.optional-dependencies]
+# PhaseNet-DAS (src.analysis.Phase) 需要 DAS_ML，該套件不在 PyPI，
+# 請依 Phasenet-DAS_TCOC 的說明另外安裝並放到 Python path 上。
+phasenet = []
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 180

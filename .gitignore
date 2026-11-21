@@ -1,5 +1,6 @@
 # settings
 .vscode/
+graphify-out
 
 # python
 __pycache__/

@@ -12,8 +12,8 @@ Example
 -------
 >>> from src.analysis import Phase
 >>> runner = Phase(device='cpu')                         # loads model once
->>> picks = runner.run_from_h5('2026-07-08T154732.h5', ev_id='20260708')
->>> runner.save('20260708.csv')
+>>> from src.door import load_h5
+>>> runner.run_patch(load_h5('2026-07-08T154732.h5'), ev_id='20260708').save('20260708.csv')
 """
 
 from __future__ import annotations
@@ -31,8 +31,8 @@ class Phase:
     Wrapper around ``DAS_ML.phasenet_das`` for this project's ``.h5`` files.
 
     The constructor pre-loads the PhaseNet-DAS model (an expensive operation
-    that should be done once).  After that, call :meth:`run_from_h5` or
-    :meth:`run_patch` repeatedly without re-loading the model.
+    that should be done once).  After that, call :meth:`run_patch`
+    repeatedly without re-loading the model.
 
     Parameters
     ----------

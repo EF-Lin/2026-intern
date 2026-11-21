@@ -9,11 +9,11 @@ def nptime_range_convt(date: tuple[Any, Any]) -> tuple[np.datetime64, np.datetim
     """
     ## convert tuple to np.datetime64
 
-    date formate: (time, range(s)) | (time, time)
+    date format: (time, range(s)) | (time, time)
 
-    time formate: 2026-08-09T12:00:00 | 2026/08/09 12:12:12 | 20260809 12:00:00
+    time format: 2026-08-09T12:00:00 | 2026/08/09 12:12:12 | 20260809 12:00:00
 
-    range formate: int, float
+    range format: int, float
     """
     regex = r"(\d{4})[-\/]?(\d{2})[-\/]?(\d{2})[T\s](\d{2}):(\d{2}):(\d{2})"
     replace = r"\1-\2-\3T\4:\5:\6"
@@ -31,11 +31,11 @@ def obtime_range_convt(date: tuple[Any, Any]) -> tuple[UTCDateTime, UTCDateTime]
     """
     ## convert tuple to obspy.UTCDateTime
 
-    date formate: (time, range(s)) | (time, time)
+    date format: (time, range(s)) | (time, time)
 
-    time formate: 2026-08-09T12:00:00 | 2026/08/09 12:12:12 | 20260809 12:00:00
+    time format: 2026-08-09T12:00:00 | 2026/08/09 12:12:12 | 20260809 12:00:00
 
-    range formate: int, float
+    range format: int, float
     """
     if isinstance(date[1], (int, float)):
         ret_date = (UTCDateTime(date[0]) - date[1], UTCDateTime(date[0]) + date[1])
