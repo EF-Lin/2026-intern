@@ -9,7 +9,8 @@ from src.plot import Finger, Folk, Water
 from src.utils import dicts2csv, load_config, timer
 
 cfg = load_config()
-se = Search(folder=cfg["search"]["folder"])
+_s = cfg["search"]
+se = Search(folder=_s["folder"], filename=_s.get("filename"), year=_s.get("year", 2026), julday=_s.get("julday", 189))
 main = cfg["events"]["main"]
 times = cfg["events"]["times"]
 
@@ -48,12 +49,13 @@ def pn():
 @timer
 def fk():
     c = cfg["fk"]
-    st = load_mini(se.multi_find(*_segment(c["segment"])))
-    patch, stations = transfer(st, start=c["start"])
+    files = se.multi_find(*_segment(c["segment"]))
 
     for i in tqdm(main, desc="Generating Img"):
+        # 只讀事件前後 cut + pad 秒；pad 吸收 taper / 濾波的邊界效應，處理後再切回 ±cut 秒
+        patch, stations = transfer(load_mini(files, (i, c["cut"]), pad=c["pad"]), start=c["start"])
         name = f"{stations[0]}_to_{stations[1]}_fk_plot_{i.replace(':', '')}"
-        wa = Water(pa=patch).cut((np.datetime64(i), c["cut"])).process()
+        wa = Water(pa=patch).process().cut((np.datetime64(i), c["cut"]))
         folk = Folk(wa.pa)
         folk.set_plot().fk_save(filename=name)
         print(folk.info)
@@ -63,6 +65,7 @@ def fk():
 def compareAB():
     c = cfg["compareAB"]
     fk_times = load_csv(cfg["events"]["fk_csv"])
+    # 同一組測站要切很多個時間點，整天讀一次留在記憶體重複切，比每個事件重讀檔案快
     pa1, _ = transfer(load_mini(se.find(c["station_a"])), start=c["start"])
     pa2, _ = transfer(load_mini(se.find(c["station_b"])), start=c["start"])
 

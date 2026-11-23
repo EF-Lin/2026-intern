@@ -2,7 +2,12 @@
 # 光纖段落以 (起始測站, 測站數) 表示，對應 Search.multi_find(station, n)
 
 [search]
-folder = "data_100Hz"
+folder = "data/20260708"
+# 檔名模板，可含子資料夾；省略時為 "TW.{num}..S.D.{year}.{julday}"（所有檔案放同一層）
+# 遠端 archive：folder = "/ceph/midas/seiscomp/var/lib/archive"
+#               filename = "{year}/TW/{num}/S.D/TW.{num}..S.D.{year}.{julday}"
+year = 2026
+julday = 189
 
 [events]
 main = ["2026-07-08T15:47:32"]
@@ -44,6 +49,7 @@ h5 = "2026-07-08T154732.h5"
 segment = "fk"
 start = 20
 cut = 2
+pad = 30  # 前後多讀的秒數，處理（taper/濾波）後再切掉
 
 [compareAB]
 station_a = 1333

@@ -1,10 +1,14 @@
+import os
+
 import pytest
 
-from src.door.search import Search
+from src.door.search import ARCHIVE_FILENAME, Search
 
 
 @pytest.fixture
 def sear() -> Search:
+    if not os.path.isdir("data_100Hz"):
+        pytest.skip("local data folder data_100Hz not present")
     se = Search(folder="data_100Hz/")
     return se
 
@@ -83,3 +87,20 @@ def test_missing_with_date(fake_folder) -> None:
         se.find(10)
     with pytest.raises(FileNotFoundError):
         se.multi_find(10, 1)
+
+
+def test_missing_folder(tmp_path) -> None:
+    with pytest.raises(FileNotFoundError):
+        Search(folder=str(tmp_path / "nope"))
+
+
+def test_archive_subfolders(tmp_path) -> None:
+    for num in ("00010", "00011"):
+        d = tmp_path / "2026" / "TW" / num / "S.D"
+        d.mkdir(parents=True)
+        (d / f"TW.{num}..S.D.2026.189").touch()
+    se = Search(folder=str(tmp_path), filename=ARCHIVE_FILENAME, year=2026, julday=189)
+    assert se.find(10) == str(tmp_path / "2026" / "TW" / "00010" / "S.D" / "TW.00010..S.D.2026.189")
+    assert len(se.multi_find(10, 1)) == 2
+    with pytest.raises(FileNotFoundError, match="00012"):
+        se.multi_find(10, 2)

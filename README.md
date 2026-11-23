@@ -41,6 +41,21 @@ wa = Water(pa).cut(("2026-07-08T15:47:32", 10)).process()
 Fall(wa.pa).set_plot(yname="distance").waterfall_save()
 ```
 
+Read only a time window (records outside it are skipped, so all channels of one event fit in memory).
+Use `pad` so that taper / filter edge effects fall outside the window, then cut back after processing:
+```python
+st = load_mini(se.multi_find(1578, 6), ("2026-07-08T15:47:32", 10), pad=30)
+wa = Water(transfer(st, start=20)[0]).process().cut(("2026-07-08T15:47:32", 10))
+```
+When the same channels are cut at many times (e.g. `compareAB`), reading the whole day once is faster.
+
+Read directly from the MiDAS archive on the server (one folder per channel):
+```python
+from src.door import ARCHIVE_FILENAME
+se = Search(folder="/ceph/midas/seiscomp/var/lib/archive", filename=ARCHIVE_FILENAME, year=2026, julday=189)
+```
+or set `folder` / `filename` / `year` / `julday` under `[search]` in `config.toml`.
+
 Run tests:
 ```bash
 uv run pytest

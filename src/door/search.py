@@ -5,6 +5,8 @@ from typing import Optional, Union
 from obspy import UTCDateTime
 
 DEFAULT_FILENAME = "TW.{num}..S.D.{year}.{julday}"
+# layout of the MiDAS SeisComP archive on the data server, relative to the archive root
+ARCHIVE_FILENAME = "{year}/TW/{num}/S.D/TW.{num}..S.D.{year}.{julday}"
 
 
 class Search:
@@ -14,6 +16,8 @@ class Search:
     ``filename`` is a template; supported placeholders are ``{num}`` (channel, 5 digits),
     ``{year}`` (4 digits) and ``{julday}`` (day of year, 3 digits). Placeholders that are
     absent are simply ignored, so a fixed name like ``"TW.{num}..S.D.2026.209"`` still works.
+    The template may contain sub-folders (``/``), e.g. ``ARCHIVE_FILENAME`` for the server archive
+    where every channel has its own folder.
     ``date`` (date / datetime / UTCDateTime) overrides ``year`` and ``julday`` when given.
     """
 
@@ -27,6 +31,8 @@ class Search:
         date: Optional[Union[datetime.date, UTCDateTime]] = None,
     ):
         self.folder = os.path.normpath(folder)
+        if not os.path.isdir(self.folder):
+            raise FileNotFoundError(f"folder {self.folder} does not exist")
         self.filename = DEFAULT_FILENAME if filename is None else filename
         if date is not None:
             if isinstance(date, UTCDateTime):
@@ -35,8 +41,6 @@ class Search:
                 year, julday = date.year, date.timetuple().tm_yday
         self.year = year
         self.julday = julday
-        self.folder_files: list = sorted(os.listdir(self.folder))
-        self._file_set = set(self.folder_files)
 
     def _name(self, number: int) -> str:
         return (
@@ -45,19 +49,22 @@ class Search:
             .replace("{julday}", f"{self.julday:03d}")
         )
 
+    def _path(self, number: int) -> str:
+        return os.path.normpath(os.path.join(self.folder, self._name(number)))
+
     def find(self, number: int) -> str:
-        name = self._name(number)
-        if name not in self._file_set:
-            raise FileNotFoundError(f"{name} does not exist in {self.folder}")
-        return os.path.normpath(f"{self.folder}/{name}")
+        path = self._path(number)
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"{self._name(number)} does not exist in {self.folder}")
+        return path
 
     def multi_find(self, number: int, count: int) -> list[str]:
         """
         Return files for channels number, number + 1, ..., number + count (inclusive).
         Raises FileNotFoundError listing every missing channel.
         """
-        names = [self._name(n) for n in range(number, number + count + 1)]
-        missing = [n for n in names if n not in self._file_set]
+        paths = [self._path(n) for n in range(number, number + count + 1)]
+        missing = [p for p in paths if not os.path.isfile(p)]
         if missing:
-            raise FileNotFoundError(f"{len(missing)} file(s) missing in {self.folder}: {missing}")
-        return [os.path.normpath(f"{self.folder}/{n}") for n in names]
+            raise FileNotFoundError(f"{len(missing)} file(s) missing in {self.folder}: {[os.path.relpath(p, self.folder) for p in missing]}")
+        return paths
