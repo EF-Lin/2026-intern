@@ -3,7 +3,7 @@
 import numpy as np
 from tqdm import tqdm
 
-from src.analysis import CC, separate_updown
+from src.analysis import CC, fold_legs, leg_shift, separate_updown
 from src.door import Search, load_csv, load_h5, load_mini, save, transfer
 from src.plot import Fall, Finger, Folk, Water, Wiggle
 from src.utils import dicts2csv, load_config, timer
@@ -84,6 +84,24 @@ def compareAB():
     dicts2csv(fk_times, filename=c["output"])
 
 
+def _stack_legs(patch, stations: tuple[str, str], event: str, c: dict):
+    """
+    U 型光纖：把往上段（c["up_segment"]，第一個通道 = 底部轉折點）反轉、對到往下段的深度後平均，提高 S/N。
+    先在 c["shift_window"] 內以互相關估計最佳通道位移（只印出來參考），實際使用 c["leg_offset"]。
+    """
+    up_files = se.multi_find(*_segment(c["up_segment"]))
+    up, up_stations = transfer(load_mini(up_files, (event, c["cut"]), pad=c["pad"]), spacing=c["spacing"])
+    if c.get("shift_window"):
+        t0 = np.datetime64(event)
+        win = tuple(t0 + np.timedelta64(int(s * 1e3), "ms") for s in c["shift_window"])
+        f = tuple(c["frequency"])
+        a, b = (Water(pa=p).process(frequency=f).pa.select(time=win) for p in (patch, up))
+        best, shifts, cc = leg_shift(a, b, max_shift=c.get("max_shift", 10))
+        zero = cc[np.argmin(np.abs(shifts))]
+        print(f"{event} leg shift: best {best:+.0f} ch (cc={np.nanmax(cc):.3f}), 0 ch cc={zero:.3f}, using {c.get('leg_offset', 0)}")
+    return fold_legs(patch, up, offset=c.get("leg_offset", 0)), (stations[0], up_stations[1])
+
+
 @timer
 def updown():
     c = cfg["updown"]
@@ -93,6 +111,8 @@ def updown():
     for i in tqdm(events, desc="Generating Img"):
         # 多讀 pad 秒，在整段資料上做濾波與 f-k 上下行波分離，最後才切回 ±cut 秒，邊界效應落在圖外
         patch, stations = transfer(load_mini(files, (i, c["cut"]), pad=c["pad"]), spacing=c["spacing"], start=c["start"])
+        if c.get("stack_legs"):
+            patch, stations = _stack_legs(patch, stations, i, c)
         full = Water(pa=patch).process(frequency=tuple(c["frequency"])).pa
         masks = {"v_min": c.get("v_min"), "v_max": c.get("v_max"), "v_taper": c.get("v_taper"), "taper": c.get("taper", 0.2)}
         up, down = separate_updown(full, **masks)

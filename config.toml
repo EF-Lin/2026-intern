@@ -26,6 +26,7 @@ fk_csv = "asset/ups.csv"
 
 [segments]
 A = { station = 1208, n = 170 }
+A_up = { station = 1378, n = 170 }  # Hole A 往上段 1378（底部，與 A 共用）–1548（井口）
 B = { station = 650, n = 122 }
 full = { station = 1559, n = 25 }
 N-S = { station = 1559, n = 5 }
@@ -68,6 +69,11 @@ v_taper = 10000      # 上行 / 下行在 k=0 的分界用 cosine 漸變，視�
 taper = 0.2          # v_min / v_max 楔形邊緣的漸變寬度（慢度的相對比例），0 = 硬切
 figsize = [12, 3]
 fk = true            # 另存 f-k 頻譜圖，檢查分離效果
+stack_legs = false   # true：U 型光纖往下段 + 往上段（反轉後對齊深度）平均，提高 S/N；圖檔名變成 {segment 起點}_to_{up_segment 終點}
+up_segment = "A_up"  # 往上段，第一個通道須為底部轉折點
+leg_offset = 0       # 往上段的通道位移（正 = 往深處移），可依下行印出的最佳位移調整
+shift_window = [-0.2, 1.3]  # 估計位移用的時間窗（相對事件秒數），刪掉則不估計
+max_shift = 10       # 估計位移時搜尋 ±幾個通道
 
 [updown.wiggle]      # 原始 / 上行 / 下行 波形疊圖（並排），刪掉此區塊即不輸出
 window = [-0.2, 1.3]  # 相對事件時間的秒數
