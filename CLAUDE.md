@@ -1,5 +1,24 @@
 # CLAUDE.md
 
+## Project map
+DAS (MiDAS fiber) processing: MiniSEED → dascore `Patch` (dims `depth`, `time`) → filter / analyze → figures & CSV.
+Read this instead of scanning the tree; open a file only when the task touches it.
+
+| Path | What lives there |
+|------|------------------|
+| `config.toml` | All task parameters: `[search]` data folder, `[events]` times, `[segments]` fiber legs `{station, n}`, one table per task (`[fk]`, `[updown]`, `[compareAB]`, `[hist]` …). Loaded by `src.utils.load_config`. |
+| `data.py` | Task entry point. Functions `draw`, `mini_2_h5`, `pn`, `fk`, `compareAB`, `updown`; pick one in `__main__`. |
+| `plot_lags_hist.py`, `plot_vap_hist.py` | Histogram scripts reading `image/data.csv`. |
+| `example.py` | Old usage example (hard-coded paths, not maintained). |
+| `src/door/` | I/O. `search.py`: `Search` maps channel numbers → file paths (`find`, `multi_find`; `DEFAULT_FILENAME` / `ARCHIVE_FILENAME`). `load.py`: `load_mini` (optional time window + `pad`), `load_h5`, `load_csv`. `transform.py`: `transfer` (obspy `Stream` → `Patch`, depth = `start + Δch·spacing`), `save` (→ `.h5`). |
+| `src/plot/` | Figures; each class wraps a `Patch` (or list of patches for side-by-side panels) and has `set_plot()` + `*_save()`. `waterfall.py`: `Water` (process / cut chain) and `Fall` (waterfall). `finger.py`: `Finger` (single-channel wave). `folks.py`: `Folk` (f-k). `wiggle.py`: `Wiggle`. `hist.py`: `plot_hist`. |
+| `src/analysis/` | `cross.py`: `CC` cross-correlation (`calculate().pick()`). `updown.py`: `separate_updown` (f-k up/down-going split). `fold.py`: `fold_legs`, `leg_shift`, `mirror_depth` (stack the two legs of a U-shaped borehole fiber). `phasenet.py`: `Phase` (PhaseNet-DAS via external `DAS_ML`, lazy import). |
+| `src/utils/` | `config.py` (`load_config`), `folder.py` (`mkdir`, `check_file` — never overwrites, appends ` (1)`), `convert.py` (time-range conversion), `figtools.py`, `saving.py` (`dicts2csv`), `timing.py` (`@timer`). |
+| `tests/` | pytest, mirrors `src/` (`tests/load/test_search.py` skips without local data). Run `uv run pytest`. |
+
+Gitignored, local-only: `data/<YYYYMMDD>/` (MiniSEED, one file per channel) and `data/*.h5`, `asset/` (event CSVs), `image/` (figures + `data.csv`), `picks/`, `paper/` (metadata), `*.pth`, `t.py`.
+Outputs go to `image/` (figures) and `picks/` (PhaseNet) relative to the working directory, so run scripts from the repo root.
+
 ## MiDAS data facts
 Data files are gitignored; these facts save re-reading them.
 
