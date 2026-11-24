@@ -6,6 +6,7 @@ A project aim to process DAS (Distributed Acoustic Sensing, 分散式光纖聲�
 - Wave and waterfall plot
 - GIF images of waterfall and wave
 - Analyze data by PhaseNet DAS or Cross Correlation
+- Separate up-going and down-going waves of borehole fiber (f-k filter), with waterfall, f-k and wiggle plots
 
 ## Installation
 ### pip
@@ -22,7 +23,7 @@ uv sync
 All parameters (data folder, event times, fiber segments, per-task settings) live in `config.toml`.
 
 ```bash
-uv run python data.py            # run the task selected in data.py's __main__ (draw / mini_2_h5 / pn / fk / compareAB)
+uv run python data.py            # run the task selected in data.py's __main__ (draw / mini_2_h5 / pn / fk / compareAB / updown)
 uv run python plot_lags_hist.py  # histogram of lags_AB from image/data.csv
 uv run python plot_vap_hist.py   # histogram of v_ap from image/data.csv
 ```
@@ -49,6 +50,26 @@ wa = Water(transfer(st, start=20)[0]).process().cut(("2026-07-08T15:47:32", 10))
 ```
 When the same channels are cut at many times (e.g. `compareAB`), reading the whole day once is faster.
 
+Up-going / down-going waves in a borehole (Hole A downward leg: channels 1208–1378).
+Separate on the padded window, then cut, so edge effects of the f-k filter fall outside the figure:
+```python
+from src.analysis import separate_updown
+from src.plot import Folk, Wiggle
+
+t, r = "2026-07-08T15:47:32", ("2026-07-08T15:47:32", 2)
+pa, _ = transfer(load_mini(se.multi_find(1208, 170), r, pad=30), start=0)
+full = Water(pa).process().pa
+up, down = separate_updown(full, v_min=500, v_max=8000)  # drop |v| < 500 m/s and |v| > 8000 m/s
+raw, up, down = (Water(p).cut(r).pa for p in (full, up, down))
+
+Fall([raw, up, down]).set_plot(title=["Raw", "Up-going", "Down-going"], yname="Depth (m)").waterfall_save()
+Folk([raw, up, down]).set_plot(v_lines={"v_min": 500, "v_max": 8000}).fk_save()  # mask boundaries on the f-k plot
+Wiggle([raw, up, down]).set_plot(color=["black", "red", "blue"], every=4).wiggle_save()
+```
+- Down-going = moving towards larger depth; the direction comes from the depth coordinate, so the upward leg of a U-shaped fiber also works.
+- `v_taper` (default 10000 m/s) smooths the up / down boundary at k = 0, and `taper` smooths the edges of the `v_min` / `v_max` wedges, which reduces ringing. Without `v_min` / `v_max`, `up + down` equals the input.
+- `data.py`'s `updown()` runs this for every event; settings (segment, `label` for titles, masks, wiggle window / gain) are under `[updown]` and `[updown.wiggle]` in `config.toml`.
+
 Read directly from the MiDAS archive on the server (one folder per channel):
 ```python
 from src.door import ARCHIVE_FILENAME
@@ -67,9 +88,9 @@ PhaseNet-DAS (`src.analysis.Phase`) additionally requires `DAS_ML`, which is not
 ```bash
 .
 ├── src/
-│   ├── analysis/     # Analyze data (cross correlation, PhaseNet DAS)
+│   ├── analysis/     # Analyze data (cross correlation, PhaseNet DAS, up/down-going separation)
 │   ├── door/         # Search, load and transform data
-│   ├── plot/         # Generate figures (wave, waterfall, f-k, histogram)
+│   ├── plot/         # Generate figures (wave, waterfall, f-k, wiggle, histogram)
 │   └── utils/        # Other tools
 ├── config.toml       # Event times, fiber segments and task parameters
 ├── tests/
@@ -86,3 +107,4 @@ PhaseNet-DAS (`src.analysis.Phase`) additionally requires `DAS_ML`, which is not
 - 2026/08/24, Collaborate with AI(Claude)
 - 2026/08/25, PhaseNet DAS feature
 - 2026/08/29, Cross correlation feature
+- 2026/11/24, Up-going / down-going wave separation and wiggle plot

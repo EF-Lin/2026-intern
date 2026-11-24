@@ -18,9 +18,13 @@ def single_fk(
     cmap: str = "jet",
     log_floor: float = 1e-4,
     title: str = "f-k Spectrum",
+    v_lines: Optional[dict[str, float]] = None,
 ) -> tuple[plt.Axes, dict]:
     """
     Plot a single f-k spectrum on the given Axes and return peak info.
+
+    ``v_lines`` maps a legend label to an apparent velocity v (m/s); the lines f = ±v k are drawn,
+    e.g. to show the boundaries of an f-k filter mask.
 
     Returns
     -------
@@ -84,6 +88,14 @@ def single_fk(
         alpha=0.5,
         label="Conjugate Peak",
     )
+
+    if v_lines:
+        kk = np.array([k_axis[0], k_axis[-1]])
+        for (label, v), color, style in zip(v_lines.items(), ("white", "magenta", "cyan", "yellow"), ("-", "--", ":", "-.")):
+            ax.plot(kk, v * kk, color=color, linestyle=style, linewidth=1.2, label=label)
+            ax.plot(kk, -v * kk, color=color, linestyle=style, linewidth=1.2)
+        ax.set_xlim(k_axis[0], k_axis[-1])
+        ax.set_ylim(f_axis[0], f_axis[-1])
 
     ax.get_figure().colorbar(im, ax=ax, label="Energy")
     ax.set_xlabel("Wavenumber $k$ (1/m)")

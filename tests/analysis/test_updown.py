@@ -77,3 +77,36 @@ def test_v_max_removes_common_mode():
     for est, ref in zip(separate_updown(pa, v_max=8000.0), (up, down)):
         without = separate_updown(pa)[0 if ref is up else 1]
         assert _ratio(est.data, ref) < 0.6 * _ratio(without.data, ref)
+
+
+@pytest.mark.parametrize("v_taper", [None, 10000.0, 3000.0])
+def test_mask_split_sums_to_one(v_taper):
+    from src.analysis.updown import _fk_masks
+
+    up, down = _fk_masks(64, 32, DT, DX, v_taper=v_taper)
+    np.testing.assert_allclose(up + down, 1.0)
+    assert up.min() >= 0 and down.min() >= 0
+
+
+def test_wedge_taper_is_smooth():
+    from src.analysis.updown import _fk_masks
+
+    up, down = _fk_masks(256, 128, DT, DX, v_max=8000.0, taper=0.2)
+    keep = up + down
+    assert keep.min() >= 0 and keep.max() <= 1
+    assert np.any((keep > 0.05) & (keep < 0.95))  # ramp, not a hard 0 / 1 edge
+    assert keep[10, 0] == 0  # k = 0 (infinite velocity) is rejected
+
+
+def test_fk_plot_draws_velocity_lines():
+    import matplotlib
+
+    matplotlib.use("Agg")
+    from src.plot import Folk
+
+    depth = np.arange(100) * DX
+    up, down = _waves(depth)
+    fo = Folk(_patch(up + down, depth)).set_plot(v_lines={"v_max": 8000.0})
+    ax = fo.fig.axes[0]
+    assert any(line.get_label() == "v_max" for line in ax.get_lines())
+    matplotlib.pyplot.close(fo.fig)
