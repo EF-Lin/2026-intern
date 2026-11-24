@@ -100,7 +100,7 @@ def updown():
         vmax = float(np.percentile(np.abs(wa.pa.data), c["scale"] * 100))
         tag = f"{stations[0]}_to_{stations[1]}"
         stamp = i.replace(":", "")
-        titles = [f"{i.replace('T', ' ')} {c['segment']} {name}" for name in ("Raw", "Up-going", "Down-going")]
+        titles = [f"{i.replace('T', ' ')} {c.get('label', c['segment'])} {name}" for name in ("Raw", "Up-going", "Down-going")]
         Fall([wa.pa, up, down]).set_plot(figsize=tuple(c["figsize"]), title=titles, scale=(-vmax, vmax), yname="Depth (m)").waterfall_save(filename=f"{tag}_updown_{stamp}")
         if c.get("wiggle"):
             w = c["wiggle"]

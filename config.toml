@@ -53,6 +53,7 @@ pad = 30  # 前後多讀的秒數，處理（taper/濾波）後再切掉
 
 [updown]
 segment = "A"        # Hole A 往下段（通道 1208–1378）；改 "B" 為 Hole B
+label = "Hole A"     # 圖片標題用的名稱；改跑 Hole B 時一併改成 "Hole B"
 csv = ""             # 留空用 events.main；填 "asset/ups.csv" 跑該表所有事件
 start = 0            # 第一個通道的深度 (m)
 spacing = 4.0        # 通道間距 (m)
