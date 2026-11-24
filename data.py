@@ -3,9 +3,9 @@
 import numpy as np
 from tqdm import tqdm
 
-from src.analysis import CC
+from src.analysis import CC, separate_updown
 from src.door import Search, load_csv, load_h5, load_mini, save, transfer
-from src.plot import Finger, Folk, Water
+from src.plot import Fall, Finger, Folk, Water, Wiggle
 from src.utils import dicts2csv, load_config, timer
 
 cfg = load_config()
@@ -82,6 +82,48 @@ def compareAB():
         i["lags_AB"] = int(ret[0]["lags"])
 
     dicts2csv(fk_times, filename=c["output"])
+
+
+@timer
+def updown():
+    c = cfg["updown"]
+    files = se.multi_find(*_segment(c["segment"]))
+    events = [row["Time"] for row in load_csv(c["csv"])] if c.get("csv") else main
+
+    for i in tqdm(events, desc="Generating Img"):
+        # 多讀 pad 秒，在整段資料上做濾波與 f-k 上下行波分離，最後才切回 ±cut 秒，邊界效應落在圖外
+        patch, stations = transfer(load_mini(files, (i, c["cut"]), pad=c["pad"]), spacing=c["spacing"], start=c["start"])
+        full = Water(pa=patch).process(frequency=tuple(c["frequency"])).pa
+        masks = {"v_min": c.get("v_min"), "v_max": c.get("v_max"), "v_taper": c.get("v_taper"), "taper": c.get("taper", 0.2)}
+        up, down = separate_updown(full, **masks)
+        r = (np.datetime64(i), c["cut"])
+        wa = Water(full).cut(r)
+        up, down = Water(up).cut(r).pa, Water(down).cut(r).pa
+
+        # 三張圖共用原始資料的色階，才能直接比較振幅
+        vmax = float(np.percentile(np.abs(wa.pa.data), c["scale"] * 100))
+        tag = f"{stations[0]}_to_{stations[1]}"
+        stamp = i.replace(":", "")
+        titles = [f"{i.replace('T', ' ')} {c.get('label', c['segment'])} {name}" for name in ("Raw", "Up-going", "Down-going")]
+        Fall([wa.pa, up, down]).set_plot(figsize=tuple(c["figsize"]), title=titles, scale=(-vmax, vmax), yname="Depth (m)").waterfall_save(filename=f"{tag}_updown_{stamp}")
+        if c.get("wiggle"):
+            w = c["wiggle"]
+            t0 = np.datetime64(i)
+            win = (t0 + np.timedelta64(int(w["window"][0] * 1e3), "ms"), t0 + np.timedelta64(int(w["window"][1] * 1e3), "ms"))
+            Wiggle([p.select(time=win) for p in (wa.pa, up, down)]).set_plot(
+                figsize=tuple(w["figsize"]),
+                title=titles,
+                color=w["color"],
+                every=w["every"],
+                gain=w["gain"],
+                per_trace=w["per_trace"],
+                t0=t0,
+                xname=f"Time after {i.replace('T', ' ')} (s)",
+            ).wiggle_save(filename=f"{tag}_wiggle_{stamp}")
+        if c.get("fk"):
+            # 在 f-k 圖上畫出遮罩的速度邊界
+            lines = {f"{key} = {masks[key]:g} m/s": masks[key] for key in ("v_min", "v_max") if masks[key]}
+            Folk([wa.pa, up, down]).set_plot(title=[f"{name} f-k" for name in ("Raw", "Up-going", "Down-going")], v_lines=lines).fk_save(filename=f"{tag}_updown_fk_{stamp}")
 
 
 if __name__ == "__main__":

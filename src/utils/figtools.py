@@ -17,13 +17,15 @@ def patch2figdata(
         float, 0.95
         tuple, (-50. 60)
     """
-    data = pa.data
+    # rows = the non-time dim (depth / distance), columns = time, so imshow draws time on x
+    data = pa.data if pa.dims[1] == "time" else pa.data.T
+    ydim = pa.dims[0] if pa.dims[1] == "time" else pa.dims[1]
 
-    dims = pa.dims
-    x = mdates.date2num(pa.coords.get_array(dims[0]).astype("datetime64[ms]").astype("O"))  # datetime64[ns]
-    y = pa.coords.get_array(dims[1])  # float (m)
+    x = mdates.date2num(pa.coords.get_array("time").astype("datetime64[ms]").astype("O"))  # datetime64[ns]
+    y = pa.coords.get_array(ydim)  # float (m)
 
-    extent = [float(x[0]), float(x[-1]), float(y[0]), float(y[-1])]
+    # imshow(origin="upper") puts row 0 at the top: top edge = y[0], bottom edge = y[-1]
+    extent = [float(x[0]), float(x[-1]), float(y[-1]), float(y[0])]
 
     if isinstance(scale, tuple):
         scale = tuple(sorted(scale))
