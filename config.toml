@@ -2,6 +2,7 @@
 # 光纖段落以 (起始測站, 測站數) 表示，對應 Search.multi_find(station, n)
 
 [search]
+# 資料放在 data/<日期>/：20260708 (julday 189)、20260728 (julday 209)、20261101 (julday 305)
 folder = "data/20260708"
 # 檔名模板，可含子資料夾；省略時為 "TW.{num}..S.D.{year}.{julday}"（所有檔案放同一層）
 # 遠端 archive：folder = "/ceph/midas/seiscomp/var/lib/archive"
@@ -43,7 +44,7 @@ segment = "h5"
 start = 200
 
 [pn]
-h5 = "2026-07-08T154732.h5"
+h5 = "data/2026-07-08.h5"
 
 [fk]
 segment = "fk"
