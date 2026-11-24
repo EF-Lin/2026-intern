@@ -15,6 +15,6 @@ jp.py
 *.pth
 asset/
 data/
-data_100Hz/
+paper/
 image/
 picks/
