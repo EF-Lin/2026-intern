@@ -3,9 +3,9 @@
 import numpy as np
 from tqdm import tqdm
 
-from src.analysis import CC
+from src.analysis import CC, separate_updown
 from src.door import Search, load_csv, load_h5, load_mini, save, transfer
-from src.plot import Finger, Folk, Water
+from src.plot import Fall, Finger, Folk, Water, Wiggle
 from src.utils import dicts2csv, load_config, timer
 
 cfg = load_config()
@@ -82,6 +82,42 @@ def compareAB():
         i["lags_AB"] = int(ret[0]["lags"])
 
     dicts2csv(fk_times, filename=c["output"])
+
+
+@timer
+def updown():
+    c = cfg["updown"]
+    files = se.multi_find(*_segment(c["segment"]))
+    events = [row["Time"] for row in load_csv(c["csv"])] if c.get("csv") else main
+
+    for i in tqdm(events, desc="Generating Img"):
+        # 多讀 pad 秒做 taper / 濾波，切回 ±cut 秒後再做 f-k 上下行波分離
+        patch, stations = transfer(load_mini(files, (i, c["cut"]), pad=c["pad"]), spacing=c["spacing"], start=c["start"])
+        wa = Water(pa=patch).process(frequency=tuple(c["frequency"])).cut((np.datetime64(i), c["cut"]))
+        up, down = separate_updown(wa.pa, v_min=c.get("v_min"), v_max=c.get("v_max"))
+
+        # 三張圖共用原始資料的色階，才能直接比較振幅
+        vmax = float(np.percentile(np.abs(wa.pa.data), c["scale"] * 100))
+        tag = f"{stations[0]}_to_{stations[1]}"
+        stamp = i.replace(":", "")
+        titles = [f"{i.replace('T', ' ')} {c['segment']} {name}" for name in ("Raw", "Up-going", "Down-going")]
+        Fall([wa.pa, up, down]).set_plot(figsize=tuple(c["figsize"]), title=titles, scale=(-vmax, vmax), yname="Depth (m)").waterfall_save(filename=f"{tag}_updown_{stamp}")
+        if c.get("wiggle"):
+            w = c["wiggle"]
+            t0 = np.datetime64(i)
+            win = (t0 + np.timedelta64(int(w["window"][0] * 1e3), "ms"), t0 + np.timedelta64(int(w["window"][1] * 1e3), "ms"))
+            Wiggle([p.select(time=win) for p in (wa.pa, up, down)]).set_plot(
+                figsize=tuple(w["figsize"]),
+                title=titles,
+                color=w["color"],
+                every=w["every"],
+                gain=w["gain"],
+                per_trace=w["per_trace"],
+                t0=t0,
+                xname=f"Time after {i.replace('T', ' ')} (s)",
+            ).wiggle_save(filename=f"{tag}_wiggle_{stamp}")
+        if c.get("fk"):
+            Folk([wa.pa, up, down]).set_plot(title=[f"{name} f-k" for name in ("Raw", "Up-going", "Down-going")]).fk_save(filename=f"{tag}_updown_fk_{stamp}")
 
 
 if __name__ == "__main__":
