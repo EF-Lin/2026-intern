@@ -14,6 +14,7 @@ const S = {
   t: 0, playing: false, speed: 10, sel: null, dirty: true,
   norm: "rel", cmap: "seismic", gain: 1, exag: 2,
   range: { abs: [0, 1], rel: [0, 30] }, k: 1, unit: "counts", logK: 0,
+  evmode: "envelope", envscale: "snr", smooth: 0.1, trail: 0.2,
 };
 
 // ---------- colormaps ----------
@@ -53,15 +54,83 @@ function activeEvent(t) {
   for (const e of S.events) if (t >= e.t0 && t < e.t0 + e.n / e.fs) return e;
   return null;
 }
+// sample position u = (t - t0)·fs is fractional: values are linearly interpolated between the 50 Hz samples,
+// so slow-motion playback moves smoothly instead of stepping every 20 ms.
+function lerpAt(arr, e, s, u) {
+  const i = Math.max(0, Math.min(e.n - 1, Math.floor(u))), j = Math.min(e.n - 1, i + 1), f = Math.max(0, Math.min(1, u - i));
+  return arr[i * S.nst + s] * (1 - f) + arr[j * S.nst + s] * f;
+}
 function eventValue(e, s, t) { // counts (or ε/s), null if not loaded
   if (!e.data) return null;
-  const i = Math.floor((t - e.t0) * e.fs);
-  return e.data[i * S.nst + s] * e.scale[s] / e.full * S.k;
+  return lerpAt(e.data, e, s, (t - e.t0) * e.fs) * e.scale[s] / e.full * S.k;
+}
+
+// ---------- envelope (computed in the browser from the int16 waveform) ----------
+// env = sqrt(centred moving mean of x² over S.smooth seconds), in counts. Computed only for the event under the
+// cursor (Float32, n × n_st ≈ 40 MB for a 600 s window of 336 stations) in one O(n) pass, instead of shipping a
+// second file per event. Color scale either in counts (median .. 99.9th pct of all stations) or, per station, as
+// SNR in dB = 20·log10(env / its pre-event noise) over SNR_DB (÷ clip on the top), so loud surface stations and
+// quiet borehole stations light up alike (a linear scale is set by the strong borehole arrivals and leaves the
+// surface white). arrival = first sample where the station mean of env / (station noise median) exceeds ARRIVAL_RATIO.
+const ARRIVAL_RATIO = 2.5, NOISE_S = 200, SNR_DB = [6, 26];
+function ensureEnvelope(e) {
+  if (!e.data) return null;
+  if (e.env && e.envSmooth === S.smooth) return e.env;
+  for (const o of S.events) if (o !== e) o.env = null; // keep only one in memory
+  const n = e.n, ns = S.nst, w = Math.max(1, Math.round(S.smooth * e.fs)), h = Math.floor(w / 2);
+  const env = new Float32Array(n * ns), sq = new Float64Array(n + 1);
+  for (let s = 0; s < ns; s++) {
+    const c = e.scale[s] / e.full;
+    if (!c) continue;
+    for (let i = 0; i < n; i++) { const x = e.data[i * ns + s] * c; sq[i + 1] = sq[i] + x * x; }
+    for (let i = 0; i < n; i++) {
+      const a = Math.max(0, Math.min(n - w, i - h)), b = a + w;
+      env[i * ns + s] = Math.sqrt(Math.max(0, (sq[b] - sq[a]) / w));
+    }
+  }
+  // statistics from every 7th / 31st sample (enough for percentiles, keeps this fast).
+  // noise[s] = median envelope of station s in the first NOISE_S seconds of the window (before the origin).
+  const noise = new Float64Array(ns), nNoise = Math.min(n, Math.round(NOISE_S * e.fs));
+  for (let s = 0; s < ns; s++) {
+    if (!e.scale[s]) continue;
+    const v = []; for (let i = 0; i < nNoise; i += 7) v.push(env[i * ns + s]);
+    v.sort((a, b) => a - b); noise[s] = v[v.length >> 1] || 1;
+  }
+  const all = [];
+  for (let i = 0; i < n; i += 31) for (let s = 0; s < ns; s++) if (e.scale[s]) all.push(env[i * ns + s]);
+  all.sort((a, b) => a - b);
+  const pct = (p) => all[Math.min(all.length - 1, Math.floor(p / 100 * all.length))];
+  let arrival = null;
+  for (let i = 0; i < n && arrival === null; i++) {
+    let m = 0, k = 0;
+    for (let s = 0; s < ns; s++) if (e.scale[s]) { m += env[i * ns + s] / noise[s]; k++; }
+    if (k && m / k > ARRIVAL_RATIO) arrival = e.t0 + i / e.fs;
+  }
+  Object.assign(e, { env, noise, envSmooth: S.smooth, arrival, envCounts: [pct(50), pct(99.9)] });
+  setTimeout(drawColorbar);
+  return env;
+}
+const envValue = (e, s, t) => lerpAt(e.env, e, s, (t - e.t0) * e.fs) * S.k; // counts (or ε/s)
+function envLoHi(e) { // color range in the units of S.envscale (counts / ε/s, or dB re. station noise)
+  if (S.envscale === "snr") return [SNR_DB[0], SNR_DB[0] + (SNR_DB[1] - SNR_DB[0]) / S.gain];
+  const [lo, top] = e.envCounts;
+  return [lo * S.k, Math.max(lo * 1.5, top / S.gain) * S.k];
+}
+function envNorm(e, s, t) { // [0,1] over the color range, with an optional fading trail (peak hold over S.trail s)
+  const [lo, hi] = envLoHi(e), snr = S.envscale === "snr", div = e.noise[s] * S.k;
+  const n = (v) => ((snr ? 20 * Math.log10(Math.max(1e-9, v / div)) : v) - lo) / (hi - lo);
+  let best = n(envValue(e, s, t));
+  if (S.trail > 0) {
+    const dt = 1 / e.fs;
+    for (let a = dt; a < S.trail; a += dt) best = Math.max(best, n(envValue(e, s, t - a)) * (1 - a / S.trail));
+  }
+  return Math.max(0, Math.min(1, best));
 }
 function stationRGB(s, t) {
   const st = S.meta.stations[s];
   if (!st.has_data) return NO_DATA;
   const e = activeEvent(t);
+  if (e && e.data && S.evmode === "envelope" && ensureEnvelope(e)) return rmsRGB(envNorm(e, s, t));
   if (e && e.data) return sigRGB(Math.max(-1, Math.min(1, eventValue(e, s, t) / (e.vmax * S.k / S.gain))));
   const h = S.hours[Math.floor(t / 3600)];
   if (!h) return NOT_LOADED;
@@ -143,7 +212,9 @@ function buildScene() {
   for (const ln of m.lines) {
     const g = new THREE.BufferGeometry().setFromPoints(ln.points.map((p) => toV(...p)));
     const mat = ln.approx ? new THREE.LineDashedMaterial({ color: 0x000000, dashSize: 12, gapSize: 10 }) : new THREE.LineBasicMaterial({ color: 0x000000 });
-    const line = new THREE.Line(g, mat); if (ln.approx) line.computeLineDistances();
+    // drawn over the station squares so the fiber stays visible where stations are white (quiet in envelope mode)
+    mat.depthTest = false;
+    const line = new THREE.Line(g, mat); line.renderOrder = 3; if (ln.approx) line.computeLineDistances();
     world.add(line); g.computeBoundingBox(); box.union(g.boundingBox);
     const name = ln.section;
     if (/^Hole .*\(down\)/.test(name)) {
@@ -241,7 +312,7 @@ function valueText(i, t) {
   const s = S.meta.stations[i];
   if (!s.has_data) return "";
   const e = activeEvent(t);
-  if (e && e.data) return `amplitude ${eventValue(e, i, t).toFixed(1)} ${S.unit}`;
+  if (e && e.data) return `amplitude ${eventValue(e, i, t).toFixed(1)} ${S.unit}` + (e.env && S.evmode === "envelope" ? `\nenvelope ${envValue(e, i, t).toFixed(1)} ${S.unit} (SNR ${(20 * Math.log10(envValue(e, i, t) / (e.noise[i] * S.k))).toFixed(1)} dB)` : "");
   const h = S.hours[Math.floor(t / 3600)], q = h && h[(Math.floor(t) % 3600) * S.nst + i];
   if (!q) return "";
   return S.norm === "abs" ? `log10 RMS ${logOf(q).toFixed(2)} (${S.unit})` : `${(20 * (logOf(q) - S.logK - s.median)).toFixed(1)} dB re. daily median`;
@@ -252,11 +323,23 @@ function modeIsEvent() { const e = activeEvent(S.t); return e && e.data ? e : nu
 function drawColorbar() {
   const cv = $("colorbar"), g = cv.getContext("2d"), w = cv.width, e = modeIsEvent();
   for (let x = 0; x < w; x++) {
-    const n = x / (w - 1), c = e ? sigRGB(n * 2 - 1) : rmsRGB(n);
+    const n = x / (w - 1), c = e && S.evmode !== "envelope" ? sigRGB(n * 2 - 1) : rmsRGB(n);
     g.fillStyle = `rgb(${c.map((v) => Math.round(v * 255))})`; g.fillRect(x, 0, 1, cv.height);
   }
   const band = S.meta ? `${S.meta.filter.frequency[0]}–${S.meta.filter.frequency[1]} Hz bandpass` : "";
-  if (e) {
+  if (e && S.evmode === "envelope" && e.env) {
+    const [lo, hi] = envLoHi(e), snr = S.envscale === "snr";
+    const f = (v) => snr ? v.toFixed(1) : v.toPrecision(3);
+    $("cb-lo").textContent = f(lo); $("cb-mid").textContent = f((lo + hi) / 2); $("cb-hi").textContent = f(hi);
+    $("cb-title").textContent = (snr
+      ? `Envelope SNR (dB) = 20·log10(envelope / station noise), ${band}, smoothing ${S.smooth} s. `
+        + `Noise = each station's median envelope in the first ${NOISE_S} s of the window. Range ${SNR_DB[0]}–${SNR_DB[1]} dB, top ÷ ${S.gain}. `
+      : `Envelope of filtered amplitude (${S.unit}), ${band}, smoothing ${S.smooth} s. Low end = median envelope of this event window, `
+        + `high end = 99.9th pct ÷ ${S.gain}. `)
+      + `Envelope = sqrt of centred moving mean of x², linear between ${e.fs} Hz samples.`
+      + (S.trail ? ` Trail: peak of the last ${S.trail} s, fading linearly to 0.` : "");
+    $("mode-line").textContent = `MODE: event envelope E${e.i + 1}`;
+  } else if (e) {
     const v = e.vmax * S.k / S.gain;
     $("cb-lo").textContent = (-v).toPrecision(3); $("cb-mid").textContent = "0"; $("cb-hi").textContent = v.toPrecision(3);
     $("cb-title").textContent = `Filtered amplitude (${S.unit}), ${band}, ${e.fs} Hz samples. Clip = 99th pct of |amplitude| in this event ÷ ${S.gain}`;
@@ -300,6 +383,11 @@ function drawWave() {
   g.strokeStyle = "#bbb"; g.lineWidth = 1; g.beginPath(); g.moveTo(px(0), 0); g.lineTo(px(0), H); g.stroke();
   g.strokeStyle = "#000"; g.beginPath();
   xs.forEach((x, k) => k ? g.lineTo(px(x), py(ys[k])) : g.moveTo(px(x), py(ys[k]))); g.stroke();
+  if (e && e.env && S.evmode === "envelope") {
+    g.strokeStyle = "#888"; g.beginPath();
+    xs.forEach((x, k) => { const y = py(envValue(e, i, x + S.t)); k ? g.lineTo(px(x), y) : g.moveTo(px(x), y); }); g.stroke();
+    $("wave-title").textContent += `; gray = envelope (smoothing ${S.smooth} s)`;
+  }
   g.fillStyle = "#000"; g.font = `${11 * dpr}px Courier New`;
   g.fillText(hi.toPrecision(3), 2, 11 * dpr); g.fillText(lo.toPrecision(3), 2, H - 2 * dpr);
   g.fillText("cursor", px(0) + 3 * dpr, 11 * dpr);
@@ -392,6 +480,18 @@ dragTime($("waterfall"), true);
 // ---------- controls ----------
 $("play").onclick = () => { S.playing = !S.playing; $("play").textContent = S.playing ? "pause" : "play"; $("play").classList.toggle("on", S.playing); };
 $("speed").onchange = (e) => S.speed = +e.target.value;
+const setSpeed = (v) => { S.speed = v; $("speed").value = String(v); };
+// jump to 1 s before the first strong arrival of the event under (or next after) the cursor and play at 0.05×
+$("replay").onclick = () => {
+  const e = activeEvent(S.t) || S.events.find((e) => e.t0 > S.t) || S.events[0];
+  if (!e || !e.data || !ensureEnvelope(e)) { $("status").textContent = "event data not loaded yet"; return; }
+  setT((e.arrival ?? e.origin) - 1); setSpeed(0.05);
+  if (!S.playing) $("play").click();
+};
+document.querySelectorAll("input[name=evmode]").forEach((r) => r.onchange = () => { S.evmode = r.value; drawColorbar(); S.dirty = true; });
+document.querySelectorAll("input[name=envscale]").forEach((r) => r.onchange = () => { S.envscale = r.value; drawColorbar(); S.dirty = true; });
+$("smooth").onchange =(e) => { S.smooth = +e.target.value; S.dirty = true; };
+$("trail").onchange = (e) => { S.trail = +e.target.value; drawColorbar(); S.dirty = true; };
 document.querySelectorAll("[data-step]").forEach((b) => b.onclick = () => setT(S.t + +b.dataset.step));
 $("prev-ev").onclick = () => { const e = [...S.events].reverse().find((e) => e.origin < S.t - 21); if (e) setT(e.origin - 20); };
 $("next-ev").onclick = () => { const e = S.events.find((e) => e.origin > S.t + 20.5); if (e) setT(e.origin - 20); };
@@ -425,7 +525,7 @@ function frame(now) {
     const e = activeEvent(S.t);
     if (e) ensureEvent(e);
     const ev = modeIsEvent();
-    if (ev !== lastEvent) { lastEvent = ev; drawColorbar(); }
+    if (ev !== lastEvent) { lastEvent = ev; if (ev && S.evmode === "envelope") ensureEnvelope(ev); drawColorbar(); }
     if (S.dirty) {
       const col = points.geometry.attributes.color;
       for (let i = 0; i < S.nst; i++) col.array.set(stationRGB(i, S.t), i * 3);
