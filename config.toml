@@ -95,6 +95,11 @@ event_half = 300     # 事件窗：事件前後各幾秒存波形
 events = ["2026-07-08T15:47:32"]  # 要存波形的事件（UTC），預設同 events.main
 counts_to_strain_rate = 0  # counts → ε/s 換算係數；0 = 未知，網頁以 counts 標示
 
+[web.arrivals]       # 事件初達時間 + 平面波擬合（src/web/arrivals.py），結果寫進 meta.json events[k].arrivals
+half = 2             # 挑時前先把每個站點與同段光纖前後各幾個站點平均（提高訊噪比）
+pos_sigma = 100      # 通道位置不確定度 (m)，用來估計方位角的 ± 值
+skip = false         # true = 不做
+
 [web.demo]           # web_demo：不讀 MiniSEED 的合成資料，格式與真實輸出相同
 day = "demo"
 start = "2026-07-08T00:00:00"
