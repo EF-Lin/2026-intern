@@ -1,5 +1,7 @@
 """MiDAS 資料處理任務。參數集中在 config.toml，修改最下方 __main__ 選擇要跑的任務。"""
 
+from functools import cache
+
 import numpy as np
 from tqdm import tqdm
 
@@ -9,10 +11,15 @@ from src.plot import Fall, Finger, Folk, Water, Wiggle
 from src.utils import dicts2csv, load_config, timer
 
 cfg = load_config()
-_s = cfg["search"]
-se = Search(folder=_s["folder"], filename=_s.get("filename"), year=_s.get("year", 2026), julday=_s.get("julday", 189))
 main = cfg["events"]["main"]
 times = cfg["events"]["times"]
+
+
+@cache
+def se() -> Search:
+    """資料夾在第一次用到時才檢查，web_demo 等不讀 MiniSEED 的任務不需要 data/。"""
+    s = cfg["search"]
+    return Search(folder=s["folder"], filename=s.get("filename"), year=s.get("year", 2026), julday=s.get("julday", 189))
 
 
 def _segment(name: str) -> tuple[int, int]:
@@ -23,7 +30,7 @@ def _segment(name: str) -> tuple[int, int]:
 @timer
 def draw():
     c = cfg["draw"]
-    fi = Finger(load_mini(se.find(c["station"]))).process()
+    fi = Finger(load_mini(se().find(c["station"]))).process()
     for i in tqdm(main, desc="Generating Img"):
         fi.set_time_range(i).focus_save(figsize=tuple(c["figsize"]))
 
@@ -31,7 +38,7 @@ def draw():
 @timer
 def mini_2_h5():
     c = cfg["mini_2_h5"]
-    st = load_mini(se.multi_find(*_segment(c["segment"])))
+    st = load_mini(se().multi_find(*_segment(c["segment"])))
     pa, _ = transfer(st, start=c["start"])
     wa = Water(pa=pa).process()
     save(wa.pa, name=main[0])
@@ -49,7 +56,7 @@ def pn():
 @timer
 def fk():
     c = cfg["fk"]
-    files = se.multi_find(*_segment(c["segment"]))
+    files = se().multi_find(*_segment(c["segment"]))
 
     for i in tqdm(main, desc="Generating Img"):
         # 只讀事件前後 cut + pad 秒；pad 吸收 taper / 濾波的邊界效應，處理後再切回 ±cut 秒
@@ -66,8 +73,8 @@ def compareAB():
     c = cfg["compareAB"]
     fk_times = load_csv(cfg["events"]["fk_csv"])
     # 同一組測站要切很多個時間點，整天讀一次留在記憶體重複切，比每個事件重讀檔案快
-    pa1, _ = transfer(load_mini(se.find(c["station_a"])), start=c["start"])
-    pa2, _ = transfer(load_mini(se.find(c["station_b"])), start=c["start"])
+    pa1, _ = transfer(load_mini(se().find(c["station_a"])), start=c["start"])
+    pa2, _ = transfer(load_mini(se().find(c["station_b"])), start=c["start"])
 
     for i in tqdm(fk_times):
         t = np.datetime64(i["Time"])
@@ -89,7 +96,7 @@ def _stack_legs(patch, stations: tuple[str, str], event: str, c: dict):
     U 型光纖：把往上段（c["up_segment"]，第一個通道 = 底部轉折點）反轉、對到往下段的深度後平均，提高 S/N。
     先在 c["shift_window"] 內以互相關估計最佳通道位移（只印出來參考），實際使用 c["leg_offset"]。
     """
-    up_files = se.multi_find(*_segment(c["up_segment"]))
+    up_files = se().multi_find(*_segment(c["up_segment"]))
     up, up_stations = transfer(load_mini(up_files, (event, c["cut"]), pad=c["pad"]), spacing=c["spacing"])
     if c.get("shift_window"):
         t0 = np.datetime64(event)
@@ -105,7 +112,7 @@ def _stack_legs(patch, stations: tuple[str, str], event: str, c: dict):
 @timer
 def updown():
     c = cfg["updown"]
-    files = se.multi_find(*_segment(c["segment"]))
+    files = se().multi_find(*_segment(c["segment"]))
     events = [row["Time"] for row in load_csv(c["csv"])] if c.get("csv") else main
 
     for i in tqdm(events, desc="Generating Img"):
@@ -144,6 +151,32 @@ def updown():
             # 在 f-k 圖上畫出遮罩的速度邊界
             lines = {f"{key} = {masks[key]:g} m/s": masks[key] for key in ("v_min", "v_max") if masks[key]}
             Folk([wa.pa, up, down]).set_plot(title=[f"{name} f-k" for name in ("Raw", "Up-going", "Down-going")], v_lines=lines).fk_save(filename=f"{tag}_updown_fk_{stamp}")
+
+
+def _web_info(c: dict, origin: tuple[float, float], demo: bool) -> dict:
+    return dict(
+        demo=demo,
+        every=c["every"],
+        origin=dict(lat=origin[0], lon=origin[1]),
+        filter=dict(type="bandpass", frequency=c["frequency"]),
+        units="counts",
+        counts_to_strain_rate=c.get("counts_to_strain_rate") or None,
+        timezone=dict(label="UTC+8", offset_hours=8),
+    )
+
+
+@timer
+def web_demo():
+    """合成一整天的假資料（不讀 MiniSEED），輸出成網站格式到 web/data/demo/。"""
+    from src.web import build_stations, fiber_lines, load_sections, make_demo, write_day
+
+    c, d = cfg["web"], cfg["web"]["demo"]
+    sections, origin = load_sections(c["geometry"], leg_offset=c["leg_offset"])
+    available = set(range(d["channels"][0], d["channels"][1] + 1))
+    stations = build_stations(sections, c["every"], available)
+    log_rms, events = make_demo(stations, d["start"], d["events"], fs=c["event_fs"], half=c["event_half"], seed=d["seed"])
+    folder = write_day(c["out"], d["day"], d["start"], stations, fiber_lines(sections), log_rms, events, _web_info(c, origin, demo=True))
+    print(f"{len(stations)} stations -> {folder}")
 
 
 if __name__ == "__main__":

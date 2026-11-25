@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MiDAS Fiber Viewer</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<header>
+  <b>MiDAS fiber viewer</b>
+  <label>day <select id="day"></select></label>
+  <span id="badge"></span>
+  <span id="status">loading…</span>
+</header>
+
+<main>
+  <section id="scene-box">
+    <div id="scene"></div>
+    <div id="tooltip" hidden></div>
+    <div id="views">
+      <button data-view="top">top</button>
+      <button data-view="side">side</button>
+      <button data-view="reset">reset</button>
+    </div>
+  </section>
+
+  <aside>
+    <fieldset>
+      <legend>color</legend>
+      <div id="mode-line"></div>
+      <canvas id="colorbar" height="18"></canvas>
+      <div class="cb-ticks"><span id="cb-lo"></span><span id="cb-mid"></span><span id="cb-hi"></span></div>
+      <div id="cb-title"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>station</legend>
+      <div id="station">click a station on the fiber</div>
+      <canvas id="wave" height="150"></canvas>
+      <div id="wave-title"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>settings</legend>
+      <div class="row">RMS scale
+        <label><input type="radio" name="norm" value="rel" checked> relative</label>
+        <label><input type="radio" name="norm" value="abs"> absolute</label>
+      </div>
+      <div class="row">range <input id="lo" type="number" step="any"> to <input id="hi" type="number" step="any"> <span id="range-unit"></span>
+        <button id="range-reset">default</button></div>
+      <div class="row">event clip <input id="gain" type="range" min="0.2" max="5" step="0.1" value="1"> <span id="gain-v">×1.0</span></div>
+      <div class="row">colormap <select id="cmap"><option value="seismic">seismic</option><option value="gray">gray</option></select></div>
+      <div class="row">vertical exaggeration <select id="exag"><option>1</option><option selected>2</option><option>3</option><option>5</option></select></div>
+      <div class="row">base map <select id="basemap"><option value="none">none</option><option disabled>satellite (later)</option><option disabled>OSM (later)</option></select></div>
+    </fieldset>
+  </aside>
+</main>
+
+<footer>
+  <div id="controls">
+    <button id="play">play</button>
+    <select id="speed">
+      <option value="0.1">0.1×</option><option value="1">1×</option><option value="10" selected>10×</option>
+      <option value="60">60×</option><option value="600">600×</option>
+    </select>
+    <button data-step="-60">-1m</button><button data-step="-1">-1s</button>
+    <button data-step="1">+1s</button><button data-step="60">+1m</button>
+    <button id="prev-ev">◀ event</button><button id="next-ev">event ▶</button>
+    <span id="clock" title=""></span>
+    <input id="goto" placeholder="HH:MM:SS (UTC+8)" size="16">
+  </div>
+  <canvas id="timeline" height="70"></canvas>
+  <canvas id="waterfall" height="180"></canvas>
+  <div id="wf-title"></div>
+</footer>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>

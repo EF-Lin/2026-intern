@@ -83,6 +83,30 @@ per_trace = false     # true：每道各自正規化；false：三張共用原�
 color = ["black", "red", "blue"]
 figsize = [5, 9]      # 單張大小
 
+[web]                # 可視化網站（web/）的資料輸出；網頁只讀 web/data/<day>/，不碰 MiniSEED
+out = "web/data"
+day = "20260708"     # 輸出資料夾名稱
+geometry = "asset/fiber_geometry.csv"  # 通道 ↔ 經緯度錨點，可手改
+every = 5            # 每幾個通道合成一個站點（取 RMS 最大值）
+leg_offset = 12      # 折返光纖兩條腿在圖上左右各偏移幾公尺
+frequency = [1, 20]  # 帶通濾波 (Hz)，與 [updown] 相同
+event_fs = 50        # 事件窗波形的取樣率 (Hz)
+event_half = 300     # 事件窗：事件前後各幾秒存波形
+events = ["2026-07-08T15:47:32"]  # 要存波形的事件（UTC），預設同 events.main
+counts_to_strain_rate = 0  # counts → ε/s 換算係數；0 = 未知，網頁以 counts 標示
+
+[web.demo]           # web_demo：不讀 MiniSEED 的合成資料，格式與真實輸出相同
+day = "demo"
+start = "2026-07-08T00:00:00"
+channels = [55, 1631]  # 模擬 0708 有下載的通道範圍，範圍外的站點顯示為無資料
+seed = 0
+# 假地震：azimuth = 震源方位（度，北起順時針，由測站看向震源），distance = 震央距 (m)，depth = 深度 (m)
+events = [
+    { time = "2026-07-08T03:20:05", mag = 2.2, azimuth = 30, distance = 8000, depth = 5000 },
+    { time = "2026-07-08T07:47:32", mag = 2.8, azimuth = 200, distance = 15000, depth = 10000 },
+    { time = "2026-07-08T13:05:41", mag = 1.8, azimuth = 290, distance = 5000, depth = 3000 },
+]
+
 [compareAB]
 station_a = 1333
 station_b = 772
