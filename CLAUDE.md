@@ -16,7 +16,12 @@ Read this instead of scanning the tree; open a file only when the task touches i
 | `src/utils/` | `config.py` (`load_config`), `folder.py` (`mkdir`, `check_file` — never overwrites, appends ` (1)`), `convert.py` (time-range conversion), `figtools.py`, `saving.py` (`dicts2csv`), `timing.py` (`@timer`). |
 | `tests/` | pytest, mirrors `src/` (`tests/load/test_search.py` skips without local data). Run `uv run pytest`. |
 
-Gitignored, local-only: `data/<YYYYMMDD>/` (MiniSEED, one file per channel) and `data/*.h5`, `asset/` (event CSVs), `image/` (figures + `data.csv`), `picks/`, `paper/` (metadata), `*.pth`, `t.py`.
+Gitignored, local-only:
+- `data/<YYYYMMDD>/` MiniSEED (one file per channel); `data/*.h5`.
+- `asset/` station metadata at the top level: `MiDAS metadata-20260210.csv` (channel ↔ fiber section / depth, see below), `MiDAS metadata - CHT.csv` (surface cable route CHT000–CHT010: lat/lon, cumulative distance, OTDR loss, splice dates), `MiDAS fiber cable.kmz` (cable route for Google Earth).
+- `asset/<YYYYMMDD>/` per-event-day tables, e.g. `asset/20260708/`: `ups.csv` (f-k event list), `78.csv` / `7.8.xlsx` (event times), `peaks_20260708.txt`, `picks.csv`, `data.csv`.
+- `paper/` reference PDFs only (MiDAS / borehole DAS papers; `edit-*.pdf` are annotated copies).
+- `image/` (figures + `data.csv`), `picks/`, `*.pth`, `t.py`.
 Outputs go to `image/` (figures) and `picks/` (PhaseNet) relative to the working directory, so run scripts from the repo root.
 
 ## MiDAS data facts
@@ -27,7 +32,7 @@ Data files are gitignored; these facts save re-reading them.
 - File name: `TW.{num:05d}..S.D.{year}.{julday}` (see `DEFAULT_FILENAME` / `ARCHIVE_FILENAME` in `src/door/search.py`).
 
 ### Borehole channels
-Source: `paper/MiDAS metadata-20260210.csv`. The fiber goes down each hole and back up, so each hole appears twice.
+Source: `asset/MiDAS metadata-20260210.csv`. The fiber goes down each hole and back up, so each hole appears twice.
 
 | Hole | Depth | Downward leg (ch) | Bottom (ch) | Upward leg (ch) | Spacing |
 |------|-------|-------------------|-------------|-----------------|---------|
