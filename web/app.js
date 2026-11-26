@@ -12,7 +12,7 @@ const MARGIN_L = 120, MARGIN_R = 8; // shared x layout of timeline + waterfall
 const S = {
   meta: null, base: "", nst: 0, hours: [], overview: null, events: [],
   t: 0, playing: false, speed: 10, sel: null, dirty: true,
-  norm: "rel", cmap: "seismic", gain: 1, exag: 2,
+  norm: "rel", cmap: "seismic", gain: 1, exag: 2, arrivals: false,
   range: { abs: [0, 1], rel: [0, 30] }, k: 1, unit: "counts", logK: 0,
 };
 
@@ -29,6 +29,13 @@ function cmapRGB(x) { // x in [0,1]
 const rmsRGB = (n) => S.cmap === "gray" ? cmapRGB(n) : cmapRGB(0.5 + 0.5 * Math.min(1, Math.max(0, n)));
 // signed event amplitude uses the full map, n in [-1, 1]
 const sigRGB = (n) => cmapRGB((n + 1) / 2);
+// arrival times: sequential "viridis" (matplotlib), early = dark purple, late = yellow
+const VIRIDIS = [[0.267, 0.005, 0.329], [0.229, 0.322, 0.546], [0.128, 0.567, 0.551], [0.369, 0.789, 0.383], [0.993, 0.906, 0.144]];
+function seqRGB(x) {
+  x = Math.min(1, Math.max(0, x));
+  const p = x * 4, i = Math.min(3, Math.floor(p)), f = p - i, a = VIRIDIS[i], b = VIRIDIS[i + 1];
+  return [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f, a[2] + (b[2] - a[2]) * f];
+}
 
 // ---------- time ----------
 const parseUTC = (s) => Date.parse(/Z$/.test(s) ? s : s + "Z");
@@ -58,10 +65,20 @@ function eventValue(e, s, t) { // counts (or ε/s), null if not loaded
   const i = Math.floor((t - e.t0) * e.fs);
   return e.data[i * S.nst + s] * e.scale[s] / e.full * S.k;
 }
+// ---------- arrival times (events[k].arrivals, written by src/web/arrivals.py) ----------
+const arrivalsOn = (e) => S.arrivals && e && e.arrivals;
+function arrivalMax(e) { // colour range: latest pick that the plane-wave fit kept
+  if (e._arrMax !== undefined) return e._arrMax;
+  const out = new Set(e.arrivals.outlier || []);
+  let mx = 0;
+  e.arrivals.rel_ms.forEach((v, i) => { if (v !== null && !out.has(i) && v > mx) mx = v; });
+  return (e._arrMax = Math.max(mx, 1));
+}
 function stationRGB(s, t) {
   const st = S.meta.stations[s];
   if (!st.has_data) return NO_DATA;
   const e = activeEvent(t);
+  if (e && e.data && arrivalsOn(e)) { const v = e.arrivals.rel_ms[s]; return v === null ? NO_DATA : seqRGB(v / arrivalMax(e)); }
   if (e && e.data) return sigRGB(Math.max(-1, Math.min(1, eventValue(e, s, t) / (e.vmax * S.k / S.gain))));
   const h = S.hours[Math.floor(t / 3600)];
   if (!h) return NOT_LOADED;
@@ -181,6 +198,7 @@ function buildScene() {
   world.add(label("grid 100 m", a0.clone().add(new THREE.Vector3(0, 0, 40)), 0.022));
 
   home = { c, r: box.getSize(new THREE.Vector3()).length() };
+  arrow = null; arrowFor = undefined; // rebuilt by the main loop
   view("reset");
 }
 
@@ -241,6 +259,11 @@ function valueText(i, t) {
   const s = S.meta.stations[i];
   if (!s.has_data) return "";
   const e = activeEvent(t);
+  if (e && e.data && e.arrivals) {
+    const v = e.arrivals.rel_ms[i], out = (e.arrivals.outlier || []).includes(i);
+    const arr = v === null ? "no pick" : `arrival +${v.toFixed(1)} ms${out ? " (outlier, not in fit)" : ""}`;
+    return `amplitude ${eventValue(e, i, t).toFixed(1)} ${S.unit}\n${arr}`;
+  }
   if (e && e.data) return `amplitude ${eventValue(e, i, t).toFixed(1)} ${S.unit}`;
   const h = S.hours[Math.floor(t / 3600)], q = h && h[(Math.floor(t) % 3600) * S.nst + i];
   if (!q) return "";
@@ -251,12 +274,20 @@ function valueText(i, t) {
 function modeIsEvent() { const e = activeEvent(S.t); return e && e.data ? e : null; }
 function drawColorbar() {
   const cv = $("colorbar"), g = cv.getContext("2d"), w = cv.width, e = modeIsEvent();
+  const arr = arrivalsOn(e);
   for (let x = 0; x < w; x++) {
-    const n = x / (w - 1), c = e ? sigRGB(n * 2 - 1) : rmsRGB(n);
+    const n = x / (w - 1), c = arr ? seqRGB(n) : e ? sigRGB(n * 2 - 1) : rmsRGB(n);
     g.fillStyle = `rgb(${c.map((v) => Math.round(v * 255))})`; g.fillRect(x, 0, 1, cv.height);
   }
   const band = S.meta ? `${S.meta.filter.frequency[0]}–${S.meta.filter.frequency[1]} Hz bandpass` : "";
-  if (e) {
+  $("arr-row").hidden = !(e && e.arrivals);
+  $("arr-text").textContent = e && e.arrivals ? arrivalText(e) : "";
+  if (arr) {
+    const mx = arrivalMax(e);
+    $("cb-lo").textContent = "0"; $("cb-mid").textContent = (mx / 2).toFixed(0); $("cb-hi").textContent = mx.toFixed(0);
+    $("cb-title").textContent = `Arrival time relative to first pick (ms), E${e.i + 1}. Gray = no pick / no data. First pick ${fmt(e.t0 + e.arrivals.first)} (UTC+8).`;
+    $("mode-line").textContent = `MODE: event E${e.i + 1} arrival times`;
+  } else if (e) {
     const v = e.vmax * S.k / S.gain;
     $("cb-lo").textContent = (-v).toPrecision(3); $("cb-mid").textContent = "0"; $("cb-hi").textContent = v.toPrecision(3);
     $("cb-title").textContent = `Filtered amplitude (${S.unit}), ${band}, ${e.fs} Hz samples. Clip = 99th pct of |amplitude| in this event ÷ ${S.gain}`;
@@ -269,6 +300,52 @@ function drawColorbar() {
       : `RMS / station daily median (dB), ${band}, 1 s window`;
     $("mode-line").textContent = "MODE: 1 s RMS";
   }
+}
+
+const angDiff = (a, b) => ((a - b + 540) % 360) - 180;
+function arrivalText(e) {
+  const a = e.arrivals;
+  if (a.baz === undefined) return `E${e.i + 1} plane-wave fit: not enough picks (${a.n_picked}).`;
+  const lines = [
+    `E${e.i + 1} plane-wave fit to first-arrival picks`,
+    `wave comes FROM ${a.baz.toFixed(0)}° ± ${a.baz_err.toFixed(0)}° (clockwise from N)`,
+    `  ± from picks ${a.baz_err_pick.toFixed(0)}°, from ±${a.pos_sigma} m positions ${a.baz_err_position.toFixed(0)}°`,
+    `apparent velocity ${a.v_app.toFixed(0)} ± ${a.v_app_err.toFixed(0)} m/s`,
+    a.incidence !== undefined && a.incidence !== null ? `incidence ${a.incidence.toFixed(0)}° from vertical (hole picks)` : null,
+    `fit residual ${a.residual_ms.toFixed(1)} ms rms, ${a.n_used}/${a.n_picked} picks used`,
+    `fiber is mostly a NNW–SSE line: directions across it are weakly resolved`,
+  ];
+  if (e.source) lines.push(`DEMO truth: ${e.source.azimuth.toFixed(0)}° → error ${angDiff(a.baz, e.source.azimuth).toFixed(1)}°`);
+  return lines.filter((l) => l !== null).join("\n");
+}
+
+// direction arrow on the ground plane: from the array centre toward where the wave comes from, with ±1σ wedge
+let arrow = null, arrowFor = undefined;
+function updateArrow(e) {
+  if (arrow) { world.remove(arrow); arrow = null; }
+  arrowFor = e;
+  if (!e || !e.arrivals || e.arrivals.baz === undefined) return;
+  const a = e.arrivals, c = home.c, L = home.r * 0.3, y = 2;
+  const dirOf = (deg) => { const b = deg * Math.PI / 180; return new THREE.Vector3(Math.sin(b), 0, -Math.cos(b)); };
+  const o = new THREE.Vector3(c.x, y, c.z);
+  arrow = new THREE.Group();
+  arrow.add(new THREE.ArrowHelper(dirOf(a.baz), o, L, 0x000000, L * 0.12, L * 0.06));
+  if (a.baz_err < 90) for (const s of [-1, 1]) {
+    const g = new THREE.BufferGeometry().setFromPoints([o, o.clone().add(dirOf(a.baz + s * a.baz_err).multiplyScalar(L))]);
+    const ln = new THREE.Line(g, new THREE.LineDashedMaterial({ color: 0x000000, dashSize: 15, gapSize: 12 }));
+    ln.computeLineDistances(); arrow.add(ln);
+  }
+  const tip = o.clone().add(dirOf(a.baz).multiplyScalar(L * 1.08));
+  arrow.add(label(`wave from ${a.baz.toFixed(0)}°±${a.baz_err.toFixed(0)}° (dashed ±1σ)`, tip, 0.024));
+  const lb2 = label(`v_app ${a.v_app.toFixed(0)}±${a.v_app_err.toFixed(0)} m/s`, tip, 0.024);
+  lb2.center.set(0.5, 1.6); arrow.add(lb2);
+  if (e.source) { // demo only: the true source direction, gray, to judge the estimate
+    const g = new THREE.BufferGeometry().setFromPoints([o, o.clone().add(dirOf(e.source.azimuth).multiplyScalar(L * 0.8))]);
+    arrow.add(new THREE.Line(g, new THREE.LineBasicMaterial({ color: 0x999999 })));
+    const lt = label(`demo truth ${e.source.azimuth.toFixed(0)}°`, o.clone().add(dirOf(e.source.azimuth).multiplyScalar(L * 0.85)), 0.02);
+    arrow.add(lt);
+  }
+  world.add(arrow);
 }
 
 // ---------- station waveform panel (±30 s) ----------
@@ -303,6 +380,13 @@ function drawWave() {
   g.fillStyle = "#000"; g.font = `${11 * dpr}px Courier New`;
   g.fillText(hi.toPrecision(3), 2, 11 * dpr); g.fillText(lo.toPrecision(3), 2, H - 2 * dpr);
   g.fillText("cursor", px(0) + 3 * dpr, 11 * dpr);
+  if (e && e.arrivals && e.arrivals.rel_ms[i] !== null) { // this station's first-arrival pick
+    const x = px(e.t0 + e.arrivals.first + e.arrivals.rel_ms[i] / 1000 - S.t);
+    if (x >= 0 && x <= W) {
+      g.setLineDash([4 * dpr, 3 * dpr]); g.beginPath(); g.moveTo(x, 14 * dpr); g.lineTo(x, H); g.stroke(); g.setLineDash([]);
+      g.fillText("pick", x + 3 * dpr, 24 * dpr);
+    }
+  }
 }
 
 // ---------- timeline + 2D waterfall (shared x axis: whole day) ----------
@@ -412,6 +496,7 @@ $("lo").onchange = setRange; $("hi").onchange = setRange;
 $("range-reset").onclick = () => { S.range[S.norm] = S.norm === "abs" ? S.meta.rms.default_range.map((v) => +(v + S.logK).toFixed(2)) : [0, 30]; syncSettings(); };
 $("gain").oninput = (e) => { S.gain = +e.target.value; $("gain-v").textContent = `×${S.gain.toFixed(1)}`; drawColorbar(); S.dirty = true; };
 $("cmap").onchange = (e) => { S.cmap = e.target.value; syncSettings(); };
+$("arr-toggle").onchange = (e) => { S.arrivals = e.target.checked; drawColorbar(); S.dirty = true; };
 $("exag").onchange = (e) => { S.exag = +e.target.value; buildScene(); S.dirty = true; };
 $("day").onchange = (e) => { const u = new URL(location); u.searchParams.set("day", e.target.value); location = u; };
 window.addEventListener("keydown", (e) => { if (e.target.tagName !== "INPUT" && e.code === "Space") { e.preventDefault(); $("play").click(); } });
@@ -426,6 +511,7 @@ function frame(now) {
     if (e) ensureEvent(e);
     const ev = modeIsEvent();
     if (ev !== lastEvent) { lastEvent = ev; drawColorbar(); }
+    if (ev !== arrowFor) updateArrow(ev);
     if (S.dirty) {
       const col = points.geometry.attributes.color;
       for (let i = 0; i < S.nst; i++) col.array.set(stationRGB(i, S.t), i * 3);

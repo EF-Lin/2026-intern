@@ -175,7 +175,9 @@ def web_demo():
     available = set(range(d["channels"][0], d["channels"][1] + 1))
     stations = build_stations(sections, c["every"], available)
     log_rms, events = make_demo(stations, d["start"], d["events"], fs=c["event_fs"], half=c["event_half"], seed=d["seed"])
-    folder = write_day(c["out"], d["day"], d["start"], stations, fiber_lines(sections), log_rms, events, _web_info(c, origin, demo=True))
+    arrivals = c.get("arrivals", {})
+    arrivals = None if arrivals.get("skip") else {k: v for k, v in arrivals.items() if k != "skip"}
+    folder = write_day(c["out"], d["day"], d["start"], stations, fiber_lines(sections), log_rms, events, _web_info(c, origin, demo=True), arrivals=arrivals)
     print(f"{len(stations)} stations -> {folder}")
 
 

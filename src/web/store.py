@@ -15,6 +15,8 @@ from pathlib import Path
 
 import numpy as np
 
+from .arrivals import event_arrivals
+
 SECONDS_PER_DAY = 86_400
 EVENT_FULL = 32767  # int16 value that stands for each station's max |amplitude| in the event
 
@@ -36,11 +38,14 @@ def write_day(
     log_rms: np.ndarray,
     events: list[dict],
     info: dict,
+    arrivals: dict | None = None,
 ) -> Path:
     """
     log_rms: (86400, n_st) float log10 of 1 s RMS in counts, NaN where there is no data.
     events: [{"time": ISO origin, "start": ISO first sample, "fs": Hz, "data": (n_samp, n_st) float counts}].
     info: extra meta (filter, units, origin, …) merged into meta.json.
+    arrivals: keyword arguments for `event_arrivals` (e.g. {"half": 2, "pos_sigma": 100}); None = skip the
+    first-arrival picks / plane-wave fit stored as events[k].arrivals (see src/web/arrivals.py).
     """
     folder = Path(out) / day
     folder.mkdir(parents=True, exist_ok=True)
@@ -67,6 +72,10 @@ def write_day(
         safe = np.where(scale > 0, scale, 1.0)
         np.round(data / safe * EVENT_FULL).astype(np.int16).tofile(folder / f"event_{k}.bin")
         nonzero = np.abs(data[:, scale > 0])
+        arr = {}
+        if arrivals is not None:
+            t_hint = float((np.datetime64(ev["time"]) - np.datetime64(ev["start"])) / np.timedelta64(1, "ms")) / 1e3
+            arr = {"arrivals": event_arrivals(stations, data, ev["fs"], t_hint, **arrivals)}
         ev_meta.append(
             dict(
                 time=ev["time"],
@@ -80,6 +89,7 @@ def write_day(
                 vmax=round(float(np.percentile(nonzero, 99)), 4) if nonzero.size else 1.0,
             )
             | ({"source": ev["source"]} if "source" in ev else {})  # demo only: the true source, to check direction estimates
+            | arr
         )
 
     meta = (

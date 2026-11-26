@@ -31,6 +31,8 @@ canvas { display: block; width: 100%; }
 .cb-ticks { display: flex; justify-content: space-between; }
 #cb-title, #wave-title, #wf-title { font-size: 12px; }
 #station { white-space: pre; margin-bottom: 4px; }
+#arr-text { white-space: pre-wrap; font-size: 12px; }
+#arr-text:not(:empty) { border-top: 1px solid #000; margin-top: 4px; padding-top: 4px; }
 #wave { border: 1px solid #000; }
 
 #controls { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; margin-bottom: 4px; }
