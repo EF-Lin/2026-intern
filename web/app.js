@@ -500,7 +500,7 @@ function buildWaterfallImage() {
   }
   wfImage = document.createElement("canvas"); wfImage.width = 1440; wfImage.height = n;
   wfImage.getContext("2d").putImageData(img, 0, 0);
-  $("wf-title").textContent = `2D waterfall: stations in fiber order (rows) × time (UTC+8). Per-minute max of the 1 s RMS, same color scale as above. Click to jump.`;
+  $("wf-title").textContent = `2D waterfall: stations in fiber order (rows) × time (UTC+8). Per-minute max of the 1 s RMS, same color scale as above. Click or drag to move the crosshair (time + station).`;
 }
 
 function timeTicks(g, W, H, y) {
@@ -566,7 +566,7 @@ dragTime($("timeline"));
 // ---------- event zoom waterfall (replaces the day waterfall while the cursor is inside an event window) ----------
 // Rows are either stations in fiber order, or one panel per fiber section with y = distance along the section (m).
 // In section mode every panel shares one m/px scale, so equal slopes mean equal apparent velocities.
-const EV = { span: 3, rows: "sections", norm: "clip", L: null, Lkey: "" };
+const EV = { span: 3, rows: "sections", norm: "clip", L: null, Lkey: "", anchor: null, dragEv: false };
 const EV_TOP = 4, EV_BOT = 30; // css px above / below the image (bottom: time axis)
 let SECS = []; // fiber sections that carry stations: {name, idx (station ids sorted by dist), len, hole, lo, hi}
 
@@ -643,8 +643,15 @@ function evLayout(H) {
 }
 
 // x mapping inside the event view
-const evX = (t, W) => MARGIN_L * devicePixelRatio + (t - (S.t - EV.span)) / (2 * EV.span) * (W - (MARGIN_L + MARGIN_R) * devicePixelRatio);
-const evT = (px, W) => S.t - EV.span + (px - MARGIN_L * devicePixelRatio) / (W - (MARGIN_L + MARGIN_R) * devicePixelRatio) * 2 * EV.span;
+// window centre: the cursor, except while the user positions the crosshair by clicking/dragging in this view
+// (EV.anchor keeps the window still so the picture does not slide under the pointer). Cleared on play or when
+// the cursor leaves the window.
+const evC = () => {
+  if (EV.anchor !== null && (S.playing || Math.abs(S.t - EV.anchor) > EV.span)) EV.anchor = null;
+  return EV.anchor ?? S.t;
+};
+const evX = (t, W) => MARGIN_L * devicePixelRatio + (t - (evC() - EV.span)) / (2 * EV.span) * (W - (MARGIN_L + MARGIN_R) * devicePixelRatio);
+const evT = (px, W) => evC() - EV.span + (px - MARGIN_L * devicePixelRatio) / (W - (MARGIN_L + MARGIN_R) * devicePixelRatio) * 2 * EV.span;
 // canvas y (device px) → {sec, dist, st}; null in a gap
 function evLoc(y) {
   const L = EV.L; if (!L) return null;
@@ -674,7 +681,7 @@ function drawEventView(e) {
   g.clearRect(0, 0, W, H);
   const L = evLayout(H), x0 = Math.round(MARGIN_L * dpr), x1 = Math.round(W - MARGIN_R * dpr), pw = x1 - x0;
   if (pw < 10 || L.ph < 10) return;
-  const nst = S.nst, ta = S.t - EV.span;
+  const nst = S.nst, ta = evC() - EV.span;
   const colK = new Int32Array(pw);
   let kmin = Infinity, kmax = -Infinity;
   for (let x = 0; x < pw; x++) {
@@ -735,7 +742,7 @@ function drawEventView(e) {
   // time axis (UTC+8)
   const step = { 1: 0.2, 3: 0.5, 10: 2, 30: 5 }[EV.span] || EV.span / 5, yb = L.bot;
   g.textBaseline = "top"; let lastX = -1e9;
-  for (let t = Math.ceil(ta / step) * step; t <= S.t + EV.span + 1e-6; t += step) {
+  for (let t = Math.ceil(ta / step) * step; t <= ta + 2 * EV.span + 1e-6; t += step) {
     const tt = Math.round(t * 10) / 10, x = evX(tt, W);
     g.beginPath(); g.moveTo(x, yb); g.lineTo(x, yb + 4 * dpr); g.stroke();
     const lab = fmt(tt, TZ_H, false) + (step < 1 ? "." + (Math.round(tt * 10) % 10) : ""), w = g.measureText(lab).width;
@@ -751,6 +758,7 @@ function drawEventView(e) {
   if (S.sel !== null && S.sel !== undefined) {
     const s = S.meta.stations[S.sel], y = evY(s.section, s.dist);
     if (y !== null) {
+      g.fillRect(x0, Math.round(y), x1 - x0, Math.max(1, Math.round(dpr))); // crosshair: horizontal line at the selected station
       g.beginPath(); g.moveTo(x0 - 1, y); g.lineTo(x0 - 1 - 7 * dpr, y - 4 * dpr); g.lineTo(x0 - 1 - 7 * dpr, y + 4 * dpr); g.closePath(); g.fill();
       g.beginPath(); g.moveTo(x1 + 1, y); g.lineTo(x1 + 1 + 7 * dpr, y - 4 * dpr); g.lineTo(x1 + 1 + 7 * dpr, y + 4 * dpr); g.closePath(); g.fill();
     }
@@ -763,8 +771,8 @@ function evUI(e) {
     const rows = EV.rows === "sections"
       ? "Rows: one panel per fiber section; y = distance along the section (m) from its first channel (back legs flipped onto their forth leg; holes: depth). Every panel uses the same m/px, so equal slope = equal apparent velocity."
       : "Rows: stations in fiber order (as in the day view).";
-    $("wf-title").textContent = `Event E${e.i + 1} zoom: filtered amplitude (${S.unit}), ${S.meta.filter.frequency.join("–")} Hz, ${e.fs} Hz samples, ±${EV.span} s around the cursor (vertical line), color = colorbar above${EV.norm === "trace" ? ", but each row scaled to its own max |amplitude| in this window" : ""}. ${rows} Click: jump time + select station. ←/→ = ∓0.1 s.`;
-  } else $("wf-title").textContent = `2D waterfall: stations in fiber order (rows) × time (UTC+8). Per-minute max of the 1 s RMS, same color scale as above. Click to jump. Inside an event window (gray on the timeline) this becomes the event zoom view.`;
+    $("wf-title").textContent = `Event E${e.i + 1} zoom: filtered amplitude (${S.unit}), ${S.meta.filter.frequency.join("–")} Hz, ${e.fs} Hz samples, ±${EV.span} s around the cursor (vertical line), color = colorbar above${EV.norm === "trace" ? ", but each row scaled to its own max |amplitude| in this window" : ""}. ${rows} Click or drag: move the crosshair (time + station); the window stays put until you play or leave it. ←/→ = ∓0.1 s.`;
+  } else $("wf-title").textContent = `2D waterfall: stations in fiber order (rows) × time (UTC+8). Per-minute max of the 1 s RMS, same color scale as above. Click or drag to move the crosshair (time + station). Inside an event window (gray on the timeline) this becomes the event zoom view.`;
 }
 
 {
@@ -780,14 +788,18 @@ function evUI(e) {
     if (!modeIsEvent()) { EV.dragDay = true; return dayAt(e); }
     const [px, py] = pos(e), loc = evLoc(py);
     if (!loc || px < MARGIN_L * devicePixelRatio) return;
-    const t = evT(px, cv.width);
-    S.sel = loc.st; setT(t);
+    EV.anchor = evC(); EV.dragEv = true;
+    S.sel = loc.st; setT(evT(px, cv.width));
   });
   cv.addEventListener("pointermove", (e) => {
     if (!S.meta) return;
     const ev = modeIsEvent();
     if (!ev) { if (EV.dragDay && cv.hasPointerCapture(e.pointerId)) dayAt(e); $("wf-hover").textContent = " "; return; }
     const [px, py] = pos(e), loc = evLoc(py), t = evT(px, cv.width);
+    if (EV.dragEv && cv.hasPointerCapture(e.pointerId)) { // drag the crosshair: time within the frozen window + station
+      const a = evC(); setT(Math.max(a - EV.span, Math.min(a + EV.span, t)));
+      if (loc) S.sel = loc.st;
+    }
     if (!loc || px < MARGIN_L * devicePixelRatio) { $("wf-hover").textContent = " "; return; }
     const s = S.meta.stations[loc.st], k = Math.floor((t - ev.t0) * ev.fs);
     const amp = s.has_data && k >= 0 && k < ev.n ? `${(ev.data[k * S.nst + loc.st] * ev.scale[loc.st] / ev.full * S.k).toFixed(1)} ${S.unit}` : "no data";
@@ -795,7 +807,7 @@ function evUI(e) {
     $("wf-hover").textContent = `${fmt(t, TZ_H, false)}.${String(ms).padStart(3, "0")} UTC+8 · #${loc.st} ${s.section} ch ${s.ch0}–${s.ch1} · ${loc.dist.toFixed(0)} m${secOf(s.section).hole ? " depth" : " along section"} · ${amp}`;
   });
   cv.addEventListener("pointerup", () => {
-    EV.dragDay = false;
+    EV.dragDay = false; EV.dragEv = false;
   });
   cv.addEventListener("pointerleave", () => $("wf-hover").textContent = " ");
 }
