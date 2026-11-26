@@ -59,6 +59,7 @@
         <button id="range-reset">default</button></div>
       <div class="row">event clip <input id="gain" type="range" min="0.2" max="5" step="0.1" value="1"> <span id="gain-v">×1.0</span></div>
       <div class="row">colormap <select id="cmap"><option value="seismic">seismic</option><option value="gray">gray</option></select></div>
+      <div class="row">waterfall height <select id="wf-h"><option>180</option><option selected>260</option><option>400</option><option>600</option></select> px</div>
       <div class="row">vertical exaggeration <select id="exag"><option>1</option><option selected>2</option><option>3</option><option>5</option></select></div>
       <div class="row">base map <select id="basemap"><option value="none">none</option><option disabled>satellite (later)</option><option disabled>OSM (later)</option></select></div>
     </fieldset>
@@ -79,7 +80,17 @@
     <input id="goto" placeholder="HH:MM:SS (UTC+8)" size="16">
   </div>
   <canvas id="timeline" height="70"></canvas>
-  <canvas id="waterfall" height="180"></canvas>
+  <div id="ev-bar">
+    <span id="ev-state">day view</span>
+    <label>span <select id="ev-span"><option value="1">±1 s</option><option value="3" selected>±3 s</option><option value="10">±10 s</option><option value="30">±30 s</option></select></label>
+    <label>rows <select id="ev-rows"><option value="sections" selected>sections, distance (m)</option><option value="fiber">stations, fiber order</option></select></label>
+    <label>amplitude <select id="ev-norm"><option value="clip">event clip</option><option value="trace">per station (window max)</option></select></label>
+    <button id="ev-measure" title="drag a line on the event view to read its apparent velocity">measure v_app</button>
+    <button id="ev-clear">clear line</button>
+    <span id="ev-v"></span>
+  </div>
+  <canvas id="waterfall"></canvas>
+  <div id="wf-hover">&nbsp;</div>
   <div id="wf-title"></div>
 </footer>
 

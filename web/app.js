@@ -118,6 +118,7 @@ async function loadDay(day) {
   S.range.rel = [0, 30];
   S.events = meta.events.map((e, i) => ({ ...e, i, t0: (parseUTC(e.start) - dayMs) / 1000, origin: (parseUTC(e.time) - dayMs) / 1000, data: null }));
   $("badge").textContent = meta.demo ? "DEMO · synthetic data" : "";
+  stationDistances();
   buildScene();
   setT(S.events.length ? S.events[0].origin - 20 : 0);
   syncSettings(); buildWaterfallImage(); status();
@@ -444,6 +445,9 @@ function drawTimeline() {
 }
 
 function drawWaterfall() {
+  const e = modeIsEvent();
+  evUI(e);
+  if (e) return drawEventView(e);
   const cv = $("waterfall"), g = cv.getContext("2d"), W = cv.width, H = cv.height, dpr = devicePixelRatio;
   g.clearRect(0, 0, W, H);
   if (!wfImage) return;
@@ -462,16 +466,291 @@ function drawWaterfall() {
   if (S.sel !== null && S.sel !== undefined) { const y = (S.sel + 0.5) / S.nst * H; g.fillRect(x0, y - dpr / 2, x1 - x0, dpr); }
 }
 
-function dragTime(cv, alsoStation) {
-  const at = (e) => {
-    const r = cv.getBoundingClientRect(); setT(tOf(e.clientX - r.left, cv.width));
-    if (alsoStation) { const s = Math.floor((e.clientY - r.top) / r.height * S.nst); if (s >= 0 && s < S.nst) S.sel = s; }
-  };
+function dragTime(cv) {
+  const at = (e) => { const r = cv.getBoundingClientRect(); setT(tOf(e.clientX - r.left, cv.width)); };
   cv.addEventListener("pointerdown", (e) => { cv.setPointerCapture(e.pointerId); at(e); });
   cv.addEventListener("pointermove", (e) => { if (cv.hasPointerCapture(e.pointerId)) at(e); });
 }
-dragTime($("timeline"), false);
-dragTime($("waterfall"), true);
+dragTime($("timeline"));
+
+// ---------- event zoom waterfall (replaces the day waterfall while the cursor is inside an event window) ----------
+// Rows are either stations in fiber order, or one panel per fiber section with y = distance along the section (m).
+// In section mode every panel shares one m/px scale, so equal slopes mean equal apparent velocities.
+const EV = { span: 3, rows: "sections", norm: "clip", measure: false, line: null, drag: null, L: null, Lkey: "" };
+const EV_TOP = 4, EV_BOT = 30; // css px above / below the image (bottom: time axis)
+let SECS = []; // fiber sections that carry stations: {name, idx (station ids sorted by dist), len, hole, lo, hi, bearing}
+
+// distance of each station along its section: holes = depth; others = arc length of the drawn route,
+// measured from the section's first channel, except "(back)" legs which are flipped to share their forth leg's axis
+function stationDistances() {
+  const lines = Object.fromEntries(S.meta.lines.map((ln) => [ln.section, ln.points]));
+  const arc = (pts) => { const a = [0]; for (let i = 1; i < pts.length; i++) a.push(a[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1], pts[i][2] - pts[i - 1][2])); return a; };
+  const cache = {};
+  SECS = [];
+  for (const s of S.meta.stations) {
+    const hole = /^Hole/.test(s.section), pts = lines[s.section];
+    if (hole || !pts) s.dist = s.depth;
+    else {
+      const A = cache[s.section] ||= arc(pts);
+      let best = Infinity, d = 0;
+      for (let i = 1; i < pts.length; i++) {
+        const [ax, ay] = pts[i - 1], bx = pts[i][0] - ax, by = pts[i][1] - ay, L2 = bx * bx + by * by || 1;
+        const u = Math.max(0, Math.min(1, ((s.x - ax) * bx + (s.y - ay) * by) / L2));
+        const q = Math.hypot(s.x - ax - u * bx, s.y - ay - u * by);
+        if (q < best) { best = q; d = A[i - 1] + u * (A[i] - A[i - 1]); }
+      }
+      s.dist = /\(back\)/.test(s.section) ? A.at(-1) - d : d;
+    }
+    let sec = SECS.at(-1);
+    if (!sec || sec.name !== s.section) {
+      const len = hole ? Math.max(...(pts || [[0, 0, s.depth]]).map((p) => p[2])) : (cache[s.section] || [0]).at(-1);
+      SECS.push(sec = { name: s.section, idx: [], len, hole, has: false });
+    }
+    sec.idx.push(s.id ?? S.meta.stations.indexOf(s)); sec.has ||= s.has_data;
+  }
+  for (const sec of SECS) {
+    sec.idx.sort((a, b) => S.meta.stations[a].dist - S.meta.stations[b].dist);
+    sec.len = Math.max(sec.len, S.meta.stations[sec.idx.at(-1)].dist);
+    const lo = S.meta.stations[sec.idx[0]], hi = S.meta.stations[sec.idx.at(-1)];
+    sec.lo = lo; sec.hi = hi;
+    sec.bearing = (Math.atan2(hi.x - lo.x, hi.y - lo.y) * 180 / Math.PI + 360) % 360;
+  }
+  EV.Lkey = "";
+}
+const secOf = (name) => SECS.find((s) => s.name === name);
+const nearestIn = (sec, d) => { let b = sec.idx[0], bd = Infinity; for (const i of sec.idx) { const q = Math.abs(S.meta.stations[i].dist - d); if (q < bd) { bd = q; b = i; } } return b; };
+const COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
+const compass = (b) => COMPASS[Math.round(b / 22.5) % 16];
+
+// row layout in device px: rows[y] = station id or -1, panels = [{sec, y0, y1, mpp}]
+function evLayout(H) {
+  const dpr = devicePixelRatio, key = `${H}|${EV.rows}|${dpr}`;
+  if (EV.L && EV.Lkey === key) return EV.L;
+  const top = Math.round(EV_TOP * dpr), bot = Math.round(H - EV_BOT * dpr), ph = bot - top;
+  const rows = new Int32Array(ph).fill(-1), panels = [];
+  if (EV.rows === "fiber") {
+    for (let y = 0; y < ph; y++) rows[y] = Math.min(S.nst - 1, Math.floor(y / ph * S.nst));
+    for (const sec of SECS) {
+      const ids = [...sec.idx].sort((a, b) => a - b);
+      panels.push({ sec, y0: ids[0] / S.nst * ph, y1: (ids.at(-1) + 1) / S.nst * ph, mpp: null });
+    }
+  } else {
+    const show = SECS.filter((s) => s.has), gap = 6 * dpr, minH = 16 * dpr;
+    let avail = ph - gap * (show.length - 1), total = show.reduce((a, s) => a + s.len, 0);
+    let mpp = total / avail;
+    const small = show.filter((s) => s.len / mpp < minH);
+    if (small.length) mpp = (total - small.reduce((a, s) => a + s.len, 0)) / (avail - small.length * minH);
+    let y = 0;
+    for (const sec of show) {
+      const h = sec.len / mpp < minH ? minH : sec.len / mpp, p = { sec, y0: y, y1: y + h, mpp: sec.len / h };
+      const spacing = sec.len / Math.max(1, sec.idx.length - 1);
+      for (let r = Math.floor(y); r < Math.min(ph, Math.floor(y + h)); r++) {
+        const d = (r - y + 0.5) * p.mpp, i = nearestIn(sec, d);
+        if (Math.abs(S.meta.stations[i].dist - d) <= Math.max(spacing, p.mpp)) rows[r] = i;
+      }
+      panels.push(p); y += h + gap;
+    }
+  }
+  EV.L = { top, bot, ph, rows, panels }; EV.Lkey = key;
+  return EV.L;
+}
+
+// x mapping inside the event view
+const evX = (t, W) => MARGIN_L * devicePixelRatio + (t - (S.t - EV.span)) / (2 * EV.span) * (W - (MARGIN_L + MARGIN_R) * devicePixelRatio);
+const evT = (px, W) => S.t - EV.span + (px - MARGIN_L * devicePixelRatio) / (W - (MARGIN_L + MARGIN_R) * devicePixelRatio) * 2 * EV.span;
+// canvas y (device px) → {sec, dist, st}; null in a gap
+function evLoc(y) {
+  const L = EV.L; if (!L) return null;
+  const r = Math.floor(y - L.top); if (r < 0 || r >= L.ph) return null;
+  const st = L.rows[r];
+  if (EV.rows === "fiber") return st < 0 ? null : { sec: S.meta.stations[st].section, dist: S.meta.stations[st].dist, st };
+  const p = L.panels.find((p) => r >= p.y0 && r < p.y1); if (!p) return null;
+  const dist = (r - p.y0 + 0.5) * p.mpp;
+  return { sec: p.sec.name, dist, st: st >= 0 ? st : nearestIn(p.sec, dist) };
+}
+function evY(sec, dist) { // inverse of evLoc, device px
+  const L = EV.L; if (!L) return null;
+  if (EV.rows === "fiber") { const s = secOf(sec); return s ? L.top + (nearestIn(s, dist) + 0.5) / S.nst * L.ph : null; }
+  const p = L.panels.find((p) => p.sec.name === sec); return p ? L.top + p.y0 + dist / p.mpp : null;
+}
+
+let LUT = null, lutFor = "";
+function evLUT() { // 256 colors over n in [-1, 1]
+  if (lutFor === S.cmap) return LUT;
+  LUT = new Uint8ClampedArray(256 * 3);
+  for (let i = 0; i < 256; i++) LUT.set(sigRGB(i / 255 * 2 - 1).map((v) => Math.round(v * 255)), i * 3);
+  lutFor = S.cmap; return LUT;
+}
+
+function drawEventView(e) {
+  const cv = $("waterfall"), g = cv.getContext("2d"), W = cv.width, H = cv.height, dpr = devicePixelRatio;
+  g.clearRect(0, 0, W, H);
+  const L = evLayout(H), x0 = Math.round(MARGIN_L * dpr), x1 = Math.round(W - MARGIN_R * dpr), pw = x1 - x0;
+  if (pw < 10 || L.ph < 10) return;
+  const nst = S.nst, ta = S.t - EV.span;
+  const colK = new Int32Array(pw);
+  let kmin = Infinity, kmax = -Infinity;
+  for (let x = 0; x < pw; x++) {
+    const k = Math.floor((ta + (x + 0.5) / pw * 2 * EV.span - e.t0) * e.fs);
+    colK[x] = k >= 0 && k < e.n ? k : -1;
+    if (colK[x] >= 0) { kmin = Math.min(kmin, k); kmax = Math.max(kmax, k); }
+  }
+  // per-station factor: int16 → n in [-1, 1]
+  const f = new Float32Array(nst);
+  for (let s = 0; s < nst; s++) {
+    if (EV.norm === "trace") {
+      let m = 0; for (let k = kmin; k <= kmax; k++) m = Math.max(m, Math.abs(e.data[k * nst + s]));
+      f[s] = m ? S.gain / m : 0;
+    } else f[s] = e.scale[s] / e.full * S.gain / e.vmax;
+  }
+  const lut = evLUT(), img = g.createImageData(pw, L.ph), D = img.data;
+  const gapC = [255, 255, 255], noC = NO_DATA.map((v) => v * 255), outC = NOT_LOADED.map((v) => v * 255);
+  for (let r = 0; r < L.ph; r++) {
+    const s = L.rows[r], has = s >= 0 && S.meta.stations[s].has_data;
+    for (let x = 0; x < pw; x++) {
+      const o = (r * pw + x) * 4, k = colK[x];
+      let c;
+      if (s < 0) c = gapC; else if (!has) c = noC; else if (k < 0) c = outC;
+      else {
+        const n = Math.max(-1, Math.min(1, e.data[k * nst + s] * f[s]));
+        const li = Math.round((n + 1) / 2 * 255) * 3; D[o] = lut[li]; D[o + 1] = lut[li + 1]; D[o + 2] = lut[li + 2]; D[o + 3] = 255; continue;
+      }
+      D[o] = c[0]; D[o + 1] = c[1]; D[o + 2] = c[2]; D[o + 3] = 255;
+    }
+  }
+  g.putImageData(img, x0, L.top);
+
+  // frames, section labels, distance ticks
+  g.font = `${10 * dpr}px Courier New`; g.fillStyle = "#000"; g.strokeStyle = "#000"; g.lineWidth = 1;
+  let lastY = -1e9;
+  for (const p of L.panels) {
+    const y0 = L.top + p.y0, y1 = L.top + p.y1;
+    if (EV.rows === "sections") {
+      g.strokeRect(x0 + 0.5, Math.round(y0) + 0.5, pw - 1, Math.round(y1 - y0) - 1);
+      const short = p.sec.name.replace("(forth)", "fwd").replace("(back)", "back");
+      if (y1 - y0 >= 11 * dpr) g.fillText(short.slice(0, 15), 2, y0 + 9 * dpr);
+      const ticks = (y1 - y0 >= 30 * dpr) ? [0, p.sec.len] : [];
+      // intermediate ticks every 100/200/500 m when there is room
+      const step = [100, 200, 500, 1000].find((s) => s / p.mpp >= 22 * dpr) || 0;
+      if (step && y1 - y0 >= 30 * dpr) for (let d = step; d < p.sec.len - step / 2; d += step) ticks.push(d);
+      for (const d of ticks) {
+        const y = y0 + d / p.mpp; g.beginPath(); g.moveTo(x0 - 4 * dpr, y); g.lineTo(x0, y); g.stroke();
+        const t = `${Math.round(d)}`, w = g.measureText(t).width;
+        if (y - y0 > 14 * dpr || d === 0 && y1 - y0 < 11 * dpr) g.fillText(t, x0 - 5 * dpr - w, Math.min(y + 4 * dpr, y1));
+      }
+    } else {
+      g.beginPath(); g.moveTo(x0 - 6 * dpr, y0); g.lineTo(x0, y0); g.stroke();
+      if (y0 - lastY >= 10 * dpr) { g.fillText(p.sec.name.slice(0, 18), 2, y0 + 9 * dpr); lastY = y0; }
+    }
+  }
+  if (EV.rows === "fiber") g.strokeRect(x0 + 0.5, L.top + 0.5, pw - 1, L.ph - 1);
+
+  // time axis (UTC+8)
+  const step = { 1: 0.2, 3: 0.5, 10: 2, 30: 5 }[EV.span] || EV.span / 5, yb = L.bot;
+  g.textBaseline = "top"; let lastX = -1e9;
+  for (let t = Math.ceil(ta / step) * step; t <= S.t + EV.span + 1e-6; t += step) {
+    const tt = Math.round(t * 10) / 10, x = evX(tt, W);
+    g.beginPath(); g.moveTo(x, yb); g.lineTo(x, yb + 4 * dpr); g.stroke();
+    const lab = fmt(tt, TZ_H, false) + (step < 1 ? "." + (Math.round(tt * 10) % 10) : ""), w = g.measureText(lab).width;
+    if (x - w / 2 > Math.max(lastX + 6 * dpr, 72 * dpr) && x + w / 2 < W) { g.fillText(lab, x - w / 2, yb + 5 * dpr); lastX = x + w / 2; }
+  }
+  g.fillText("time UTC+8", 2, yb + 5 * dpr);
+  if (EV.rows === "sections") g.fillText("y: dist. (m)", 2, yb + 16 * dpr);
+  g.textBaseline = "alphabetic";
+
+  // cursor line
+  const xc = evX(S.t, W); g.fillStyle = "#000"; g.fillRect(Math.round(xc), L.top, Math.max(1, Math.round(dpr)), L.ph);
+  // selected station: ticks on both sides of the image
+  if (S.sel !== null && S.sel !== undefined) {
+    const s = S.meta.stations[S.sel], y = evY(s.section, s.dist);
+    if (y !== null) {
+      g.beginPath(); g.moveTo(x0 - 1, y); g.lineTo(x0 - 1 - 7 * dpr, y - 4 * dpr); g.lineTo(x0 - 1 - 7 * dpr, y + 4 * dpr); g.closePath(); g.fill();
+      g.beginPath(); g.moveTo(x1 + 1, y); g.lineTo(x1 + 1 + 7 * dpr, y - 4 * dpr); g.lineTo(x1 + 1 + 7 * dpr, y + 4 * dpr); g.closePath(); g.fill();
+    }
+  }
+  // measured line
+  const ln = EV.drag || EV.line;
+  if (ln) {
+    const ya = evY(ln.a.sec, ln.a.dist), yb2 = evY(ln.b.sec, ln.b.dist);
+    if (ya !== null && yb2 !== null) {
+      const xa = evX(ln.a.t, W), xb = evX(ln.b.t, W);
+      g.save(); g.beginPath(); g.rect(x0, L.top, pw, L.ph); g.clip();
+      g.strokeStyle = "#fff"; g.lineWidth = 4 * dpr; g.beginPath(); g.moveTo(xa, ya); g.lineTo(xb, yb2); g.stroke();
+      g.strokeStyle = "#000"; g.lineWidth = 2 * dpr; g.beginPath(); g.moveTo(xa, ya); g.lineTo(xb, yb2); g.stroke();
+      g.restore();
+    }
+  }
+}
+
+function velocityText(ln) {
+  if (!ln) return "";
+  if (ln.a.sec !== ln.b.sec) return "line ends in two different sections: draw it inside one section";
+  const dt = ln.b.t - ln.a.t, dd = ln.b.dist - ln.a.dist;
+  if (Math.abs(dt) < 1e-3) return `Δt = 0: v_app = ∞ (wavefront hits ${Math.abs(dd).toFixed(0)} m at once)`;
+  const v = dd / dt, sec = secOf(ln.a.sec);
+  let dir;
+  const chs = (s) => s.ch0 === s.ch1 ? `ch ${s.ch0}` : `ch ${s.ch0}–${s.ch1}`;
+  if (sec.hole) dir = v > 0 ? "moving DOWN the hole (top hit first: down-going / reflected)" : "moving UP the hole (bottom hit first: wave from below)";
+  else {
+    const [from, to] = v > 0 ? [sec.lo, sec.hi] : [sec.hi, sec.lo], b = v > 0 ? sec.bearing : (sec.bearing + 180) % 360, src = (b + 180) % 360;
+    dir = `moving toward the ${chs(to)} end (bearing ${b.toFixed(0)}°, ${compass(b)}); ${chs(from)} end hit first\n→ source on the ${compass(src)} side of this line (bearing ${src.toFixed(0)}° ± 90°)`;
+  }
+  return `v_app = ${Math.abs(v).toFixed(0)} m/s along ${ln.a.sec} (Δd ${dd.toFixed(0)} m / Δt ${dt.toFixed(2)} s), ${dir}`;
+}
+
+function evUI(e) {
+  $("ev-state").textContent = e ? `event view E${e.i + 1}` : "day view";
+  $("ev-measure").classList.toggle("on", EV.measure);
+  $("ev-v").textContent = e ? velocityText(EV.drag || EV.line) : "";
+  if (e) {
+    const rows = EV.rows === "sections"
+      ? "Rows: one panel per fiber section; y = distance along the section (m) from its first channel (back legs flipped onto their forth leg; holes: depth). Every panel uses the same m/px, so equal slope = equal apparent velocity."
+      : "Rows: stations in fiber order (as in the day view).";
+    $("wf-title").textContent = `Event E${e.i + 1} zoom: filtered amplitude (${S.unit}), ${S.meta.filter.frequency.join("–")} Hz, ${e.fs} Hz samples, ±${EV.span} s around the cursor (vertical line), color = colorbar above${EV.norm === "trace" ? ", but each row scaled to its own max |amplitude| in this window" : ""}. ${rows} Click: jump time + select station. ←/→ = ∓0.1 s.`;
+  } else $("wf-title").textContent = `2D waterfall: stations in fiber order (rows) × time (UTC+8). Per-minute max of the 1 s RMS, same color scale as above. Click to jump. Inside an event window (gray on the timeline) this becomes the event zoom view.`;
+}
+
+{
+  const cv = $("waterfall");
+  const pos = (e) => { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) * devicePixelRatio, (e.clientY - r.top) * devicePixelRatio, r]; };
+  const dayAt = (e) => {
+    const r = cv.getBoundingClientRect(); setT(tOf(e.clientX - r.left, cv.width));
+    const s = Math.floor((e.clientY - r.top) / r.height * S.nst); if (s >= 0 && s < S.nst) S.sel = s;
+  };
+  cv.addEventListener("pointerdown", (e) => {
+    if (!S.meta) return;
+    cv.setPointerCapture(e.pointerId);
+    if (!modeIsEvent()) { EV.dragDay = true; return dayAt(e); }
+    const [px, py] = pos(e), loc = evLoc(py);
+    if (!loc || px < MARGIN_L * devicePixelRatio) return;
+    const t = evT(px, cv.width);
+    if (EV.measure) { EV.drag = { a: { t, ...loc }, b: { t, ...loc } }; S.dirty = true; return; }
+    S.sel = loc.st; setT(t);
+  });
+  cv.addEventListener("pointermove", (e) => {
+    if (!S.meta) return;
+    const ev = modeIsEvent();
+    if (!ev) { if (EV.dragDay && cv.hasPointerCapture(e.pointerId)) dayAt(e); $("wf-hover").textContent = " "; return; }
+    const [px, py] = pos(e), loc = evLoc(py), t = evT(px, cv.width);
+    if (EV.drag && loc) { EV.drag.b = { t, ...loc }; S.dirty = true; }
+    if (!loc || px < MARGIN_L * devicePixelRatio) { $("wf-hover").textContent = " "; return; }
+    const s = S.meta.stations[loc.st], k = Math.floor((t - ev.t0) * ev.fs);
+    const amp = s.has_data && k >= 0 && k < ev.n ? `${(ev.data[k * S.nst + loc.st] * ev.scale[loc.st] / ev.full * S.k).toFixed(1)} ${S.unit}` : "no data";
+    const ms = Math.round(((t % 1) + 1) % 1 * 1000);
+    $("wf-hover").textContent = `${fmt(t, TZ_H, false)}.${String(ms).padStart(3, "0")} UTC+8 · #${loc.st} ${s.section} ch ${s.ch0}–${s.ch1} · ${loc.dist.toFixed(0)} m${secOf(s.section).hole ? " depth" : " along section"} · ${amp}`;
+  });
+  cv.addEventListener("pointerup", () => {
+    EV.dragDay = false;
+    if (EV.drag) { const d = EV.drag; EV.drag = null; if (d.a.t !== d.b.t || d.a.dist !== d.b.dist) EV.line = d; S.dirty = true; }
+  });
+  cv.addEventListener("pointerleave", () => $("wf-hover").textContent = " ");
+}
+$("ev-span").onchange = (e) => { EV.span = +e.target.value; S.dirty = true; };
+$("ev-rows").onchange = (e) => { EV.rows = e.target.value; EV.Lkey = ""; S.dirty = true; };
+$("ev-norm").onchange = (e) => { EV.norm = e.target.value; S.dirty = true; };
+$("ev-measure").onclick = () => { EV.measure = !EV.measure; S.dirty = true; };
+$("ev-clear").onclick = () => { EV.line = null; S.dirty = true; };
+$("wf-h").onchange = (e) => { document.documentElement.style.setProperty("--wf-h", `${e.target.value}px`); EV.Lkey = ""; resize(); };
 
 // ---------- controls ----------
 $("play").onclick = () => { S.playing = !S.playing; $("play").textContent = S.playing ? "pause" : "play"; $("play").classList.toggle("on", S.playing); };
@@ -499,7 +778,12 @@ $("cmap").onchange = (e) => { S.cmap = e.target.value; syncSettings(); };
 $("arr-toggle").onchange = (e) => { S.arrivals = e.target.checked; drawColorbar(); S.dirty = true; };
 $("exag").onchange = (e) => { S.exag = +e.target.value; buildScene(); S.dirty = true; };
 $("day").onchange = (e) => { const u = new URL(location); u.searchParams.set("day", e.target.value); location = u; };
-window.addEventListener("keydown", (e) => { if (e.target.tagName !== "INPUT" && e.code === "Space") { e.preventDefault(); $("play").click(); } });
+window.addEventListener("keydown", (e) => {
+  if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || !S.meta) return;
+  if (e.code === "Space") { e.preventDefault(); $("play").click(); }
+  else if (e.code === "ArrowLeft" || e.code === "ArrowRight") { e.preventDefault(); setT(S.t + (e.code === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 1 : 0.1)); }
+  else if (e.code === "Escape") { EV.drag = null; EV.line = null; S.dirty = true; }
+});
 
 // ---------- main loop ----------
 let last = performance.now(), lastEvent = undefined;

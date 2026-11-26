@@ -12,7 +12,8 @@ button.on { background: #000; color: #fff; }
 input[type=number] { width: 6em; }
 input[type=radio] { border: 0; }
 
-main { display: flex; height: calc(100vh - 330px); min-height: 360px; }
+:root { --wf-h: 260px; }
+main { display: flex; height: calc(100vh - 200px - var(--wf-h)); min-height: 360px; }
 #scene-box { position: relative; flex: 1; min-width: 0; border-right: 1px solid #000; }
 #scene { position: absolute; inset: 0; }
 #views { position: absolute; top: 6px; left: 6px; display: flex; gap: 4px; }
@@ -26,7 +27,12 @@ canvas { display: block; width: 100%; }
 #colorbar { height: 18px; }
 #wave { height: 150px; }
 #timeline { height: 70px; }
-#waterfall { height: 180px; }
+#waterfall { height: var(--wf-h); }
+#ev-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border: 1px solid #000; border-top: 0; padding: 2px 4px; }
+#ev-state { font-weight: bold; }
+#ev-v { white-space: pre-wrap; flex-basis: 100%; }
+#ev-v:empty { display: none; }
+#wf-hover { white-space: pre; font-size: 12px; }
 #colorbar { border: 1px solid #000; }
 .cb-ticks { display: flex; justify-content: space-between; }
 #cb-title, #wave-title, #wf-title { font-size: 12px; }
