@@ -30,8 +30,6 @@ canvas { display: block; width: 100%; }
 #waterfall { height: var(--wf-h); }
 #ev-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border: 1px solid #000; border-top: 0; padding: 2px 4px; }
 #ev-state { font-weight: bold; }
-#ev-v { white-space: pre-wrap; flex-basis: 100%; }
-#ev-v:empty { display: none; }
 #wf-hover { white-space: pre; font-size: 12px; }
 #colorbar { border: 1px solid #000; }
 .cb-ticks { display: flex; justify-content: space-between; }

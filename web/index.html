@@ -38,6 +38,10 @@
       <canvas id="colorbar" height="18"></canvas>
       <div class="cb-ticks"><span id="cb-lo"></span><span id="cb-mid"></span><span id="cb-hi"></span></div>
       <div id="cb-title"></div>
+      <div class="row">event color
+        <label><input type="radio" name="evmode" value="envelope" checked> envelope</label>
+        <label><input type="radio" name="evmode" value="signed"> signed</label>
+      </div>
       <div class="row" id="arr-row" hidden><label><input type="checkbox" id="arr-toggle"> arrival times</label></div>
       <div id="arr-text"></div>
     </fieldset>
@@ -57,10 +61,6 @@
       </div>
       <div class="row">range <input id="lo" type="number" step="any"> to <input id="hi" type="number" step="any"> <span id="range-unit"></span>
         <button id="range-reset">default</button></div>
-      <div class="row">event color
-        <label><input type="radio" name="evmode" value="envelope" checked> envelope</label>
-        <label><input type="radio" name="evmode" value="signed"> signed</label>
-      </div>
       <div class="row">envelope scale
         <label><input type="radio" name="envscale" value="snr" checked> SNR (dB)</label>
         <label><input type="radio" name="envscale" value="counts"> counts</label>
@@ -96,9 +96,6 @@
     <label>span <select id="ev-span"><option value="1">±1 s</option><option value="3" selected>±3 s</option><option value="10">±10 s</option><option value="30">±30 s</option></select></label>
     <label>rows <select id="ev-rows"><option value="sections" selected>sections, distance (m)</option><option value="fiber">stations, fiber order</option></select></label>
     <label>amplitude <select id="ev-norm"><option value="clip">event clip</option><option value="trace">per station (window max)</option></select></label>
-    <button id="ev-measure" title="drag a line on the event view to read its apparent velocity">measure v_app</button>
-    <button id="ev-clear">clear line</button>
-    <span id="ev-v"></span>
   </div>
   <canvas id="waterfall"></canvas>
   <div id="wf-hover">&nbsp;</div>

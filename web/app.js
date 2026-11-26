@@ -206,7 +206,7 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(40, 1, 1, 50000);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = false;
-let world = null, points = null, marker = null, markerLabel = null, markerFor = null, home = null;
+let lineMats = [], world = null, points = null, marker = null, markerLabel = null, markerFor = null, home = null;
 
 const toV = (x, y, depth) => new THREE.Vector3(x, -depth * S.exag, -y);
 
@@ -224,14 +224,13 @@ function label(text, pos, h = 0.028) {
 
 function buildScene() {
   if (world) scene.remove(world);
-  world = new THREE.Group(); scene.add(world);
+  world = new THREE.Group(); scene.add(world); lineMats = [];
   const m = S.meta, box = new THREE.Box3();
 
   for (const ln of m.lines) {
     const g = new THREE.BufferGeometry().setFromPoints(ln.points.map((p) => toV(...p)));
     const mat = ln.approx ? new THREE.LineDashedMaterial({ color: 0x000000, dashSize: 12, gapSize: 10 }) : new THREE.LineBasicMaterial({ color: 0x000000 });
-    // drawn over the station squares so the fiber stays visible where stations are white (quiet in envelope mode)
-    mat.depthTest = false;
+    lineMats.push(mat); // depthTest is switched off in envelope mode only (see frame), so the fiber stays visible over white stations
     const line = new THREE.Line(g, mat); line.renderOrder = 3; if (ln.approx) line.computeLineDistances();
     world.add(line); g.computeBoundingBox(); box.union(g.boundingBox);
     const name = ln.section;
@@ -567,9 +566,9 @@ dragTime($("timeline"));
 // ---------- event zoom waterfall (replaces the day waterfall while the cursor is inside an event window) ----------
 // Rows are either stations in fiber order, or one panel per fiber section with y = distance along the section (m).
 // In section mode every panel shares one m/px scale, so equal slopes mean equal apparent velocities.
-const EV = { span: 3, rows: "sections", norm: "clip", measure: false, line: null, drag: null, L: null, Lkey: "" };
+const EV = { span: 3, rows: "sections", norm: "clip", L: null, Lkey: "" };
 const EV_TOP = 4, EV_BOT = 30; // css px above / below the image (bottom: time axis)
-let SECS = []; // fiber sections that carry stations: {name, idx (station ids sorted by dist), len, hole, lo, hi, bearing}
+let SECS = []; // fiber sections that carry stations: {name, idx (station ids sorted by dist), len, hole, lo, hi}
 
 // distance of each station along its section: holes = depth; others = arc length of the drawn route,
 // measured from the section's first channel, except "(back)" legs which are flipped to share their forth leg's axis
@@ -604,14 +603,11 @@ function stationDistances() {
     sec.len = Math.max(sec.len, S.meta.stations[sec.idx.at(-1)].dist);
     const lo = S.meta.stations[sec.idx[0]], hi = S.meta.stations[sec.idx.at(-1)];
     sec.lo = lo; sec.hi = hi;
-    sec.bearing = (Math.atan2(hi.x - lo.x, hi.y - lo.y) * 180 / Math.PI + 360) % 360;
   }
   EV.Lkey = "";
 }
 const secOf = (name) => SECS.find((s) => s.name === name);
 const nearestIn = (sec, d) => { let b = sec.idx[0], bd = Infinity; for (const i of sec.idx) { const q = Math.abs(S.meta.stations[i].dist - d); if (q < bd) { bd = q; b = i; } } return b; };
-const COMPASS = ["N", "NNE", "NE", "ENE", "E", "ESE", "SE", "SSE", "S", "SSW", "SW", "WSW", "W", "WNW", "NW", "NNW"];
-const compass = (b) => COMPASS[Math.round(b / 22.5) % 16];
 
 // row layout in device px: rows[y] = station id or -1, panels = [{sec, y0, y1, mpp}]
 function evLayout(H) {
@@ -759,40 +755,10 @@ function drawEventView(e) {
       g.beginPath(); g.moveTo(x1 + 1, y); g.lineTo(x1 + 1 + 7 * dpr, y - 4 * dpr); g.lineTo(x1 + 1 + 7 * dpr, y + 4 * dpr); g.closePath(); g.fill();
     }
   }
-  // measured line
-  const ln = EV.drag || EV.line;
-  if (ln) {
-    const ya = evY(ln.a.sec, ln.a.dist), yb2 = evY(ln.b.sec, ln.b.dist);
-    if (ya !== null && yb2 !== null) {
-      const xa = evX(ln.a.t, W), xb = evX(ln.b.t, W);
-      g.save(); g.beginPath(); g.rect(x0, L.top, pw, L.ph); g.clip();
-      g.strokeStyle = "#fff"; g.lineWidth = 4 * dpr; g.beginPath(); g.moveTo(xa, ya); g.lineTo(xb, yb2); g.stroke();
-      g.strokeStyle = "#000"; g.lineWidth = 2 * dpr; g.beginPath(); g.moveTo(xa, ya); g.lineTo(xb, yb2); g.stroke();
-      g.restore();
-    }
-  }
-}
-
-function velocityText(ln) {
-  if (!ln) return "";
-  if (ln.a.sec !== ln.b.sec) return "line ends in two different sections: draw it inside one section";
-  const dt = ln.b.t - ln.a.t, dd = ln.b.dist - ln.a.dist;
-  if (Math.abs(dt) < 1e-3) return `Δt = 0: v_app = ∞ (wavefront hits ${Math.abs(dd).toFixed(0)} m at once)`;
-  const v = dd / dt, sec = secOf(ln.a.sec);
-  let dir;
-  const chs = (s) => s.ch0 === s.ch1 ? `ch ${s.ch0}` : `ch ${s.ch0}–${s.ch1}`;
-  if (sec.hole) dir = v > 0 ? "moving DOWN the hole (top hit first: down-going / reflected)" : "moving UP the hole (bottom hit first: wave from below)";
-  else {
-    const [from, to] = v > 0 ? [sec.lo, sec.hi] : [sec.hi, sec.lo], b = v > 0 ? sec.bearing : (sec.bearing + 180) % 360, src = (b + 180) % 360;
-    dir = `moving toward the ${chs(to)} end (bearing ${b.toFixed(0)}°, ${compass(b)}); ${chs(from)} end hit first\n→ source on the ${compass(src)} side of this line (bearing ${src.toFixed(0)}° ± 90°)`;
-  }
-  return `v_app = ${Math.abs(v).toFixed(0)} m/s along ${ln.a.sec} (Δd ${dd.toFixed(0)} m / Δt ${dt.toFixed(2)} s), ${dir}`;
 }
 
 function evUI(e) {
   $("ev-state").textContent = e ? `event view E${e.i + 1}` : "day view";
-  $("ev-measure").classList.toggle("on", EV.measure);
-  $("ev-v").textContent = e ? velocityText(EV.drag || EV.line) : "";
   if (e) {
     const rows = EV.rows === "sections"
       ? "Rows: one panel per fiber section; y = distance along the section (m) from its first channel (back legs flipped onto their forth leg; holes: depth). Every panel uses the same m/px, so equal slope = equal apparent velocity."
@@ -815,7 +781,6 @@ function evUI(e) {
     const [px, py] = pos(e), loc = evLoc(py);
     if (!loc || px < MARGIN_L * devicePixelRatio) return;
     const t = evT(px, cv.width);
-    if (EV.measure) { EV.drag = { a: { t, ...loc }, b: { t, ...loc } }; S.dirty = true; return; }
     S.sel = loc.st; setT(t);
   });
   cv.addEventListener("pointermove", (e) => {
@@ -823,7 +788,6 @@ function evUI(e) {
     const ev = modeIsEvent();
     if (!ev) { if (EV.dragDay && cv.hasPointerCapture(e.pointerId)) dayAt(e); $("wf-hover").textContent = " "; return; }
     const [px, py] = pos(e), loc = evLoc(py), t = evT(px, cv.width);
-    if (EV.drag && loc) { EV.drag.b = { t, ...loc }; S.dirty = true; }
     if (!loc || px < MARGIN_L * devicePixelRatio) { $("wf-hover").textContent = " "; return; }
     const s = S.meta.stations[loc.st], k = Math.floor((t - ev.t0) * ev.fs);
     const amp = s.has_data && k >= 0 && k < ev.n ? `${(ev.data[k * S.nst + loc.st] * ev.scale[loc.st] / ev.full * S.k).toFixed(1)} ${S.unit}` : "no data";
@@ -832,15 +796,12 @@ function evUI(e) {
   });
   cv.addEventListener("pointerup", () => {
     EV.dragDay = false;
-    if (EV.drag) { const d = EV.drag; EV.drag = null; if (d.a.t !== d.b.t || d.a.dist !== d.b.dist) EV.line = d; S.dirty = true; }
   });
   cv.addEventListener("pointerleave", () => $("wf-hover").textContent = " ");
 }
 $("ev-span").onchange = (e) => { EV.span = +e.target.value; S.dirty = true; };
 $("ev-rows").onchange = (e) => { EV.rows = e.target.value; EV.Lkey = ""; S.dirty = true; };
 $("ev-norm").onchange = (e) => { EV.norm = e.target.value; S.dirty = true; };
-$("ev-measure").onclick = () => { EV.measure = !EV.measure; S.dirty = true; };
-$("ev-clear").onclick = () => { EV.line = null; S.dirty = true; };
 $("wf-h").onchange = (e) => { document.documentElement.style.setProperty("--wf-h", `${e.target.value}px`); EV.Lkey = ""; resize(); };
 
 // ---------- controls ----------
@@ -885,7 +846,6 @@ window.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || !S.meta) return;
   if (e.code === "Space") { e.preventDefault(); $("play").click(); }
   else if (e.code === "ArrowLeft" || e.code === "ArrowRight") { e.preventDefault(); setT(S.t + (e.code === "ArrowLeft" ? -1 : 1) * (e.shiftKey ? 1 : 0.1)); }
-  else if (e.code === "Escape") { EV.drag = null; EV.line = null; S.dirty = true; }
 });
 
 // ---------- main loop ----------
@@ -900,6 +860,8 @@ function frame(now) {
     if (ev !== lastEvent) { lastEvent = ev; if (ev && S.evmode === "envelope") ensureEnvelope(ev); drawColorbar(); }
     if (ev !== arrowFor) updateArrow(ev);
     if (S.dirty) {
+      const top = !!(ev && S.evmode === "envelope" && !arrivalsOn(ev));
+      for (const m of lineMats) m.depthTest = !top;
       const col = points.geometry.attributes.color;
       for (let i = 0; i < S.nst; i++) col.array.set(stationRGB(i, S.t), i * 3);
       col.needsUpdate = true;
