@@ -96,6 +96,7 @@ events = ["2026-07-08T15:47:32"]  # 要存波形的事件（UTC），預設同 e
 counts_to_strain_rate = 0  # counts → ε/s 換算係數；0 = 未知，網頁以 counts 標示
 
 [web.arrivals]       # 事件初達時間 + 平面波擬合（src/web/arrivals.py），結果寫進 meta.json events[k].arrivals
+                     # 真實資料：挑時與擬合在 100 Hz 原始取樣（濾波後）上做，之後才降到 event_fs 存波形；demo 只有 50 Hz
 half = 2             # 挑時前先把每個站點與同段光纖前後各幾個站點平均（提高訊噪比）
 pos_sigma = 100      # 通道位置不確定度 (m)，用來估計方位角的 ± 值
 skip = false         # true = 不做

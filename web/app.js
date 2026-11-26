@@ -333,12 +333,10 @@ function valueText(i, t) {
   const e = activeEvent(t);
   if (e && e.data) {
     let txt = `amplitude ${eventValue(e, i, t).toFixed(1)} ${S.unit}`;
-    if (e.env && S.evmode === "envelope") txt += `
-envelope ${envValue(e, i, t).toFixed(1)} ${S.unit} (SNR ${(20 * Math.log10(envValue(e, i, t) / (e.noise[i] * S.k))).toFixed(1)} dB)`;
+    if (e.env && S.evmode === "envelope") txt += `\nenvelope ${envValue(e, i, t).toFixed(1)} ${S.unit} (SNR ${(20 * Math.log10(envValue(e, i, t) / (e.noise[i] * S.k))).toFixed(1)} dB)`;
     if (e.arrivals) {
       const v = e.arrivals.rel_ms[i], out = (e.arrivals.outlier || []).includes(i);
-      txt += "
-" + (v === null ? "no pick" : `arrival +${v.toFixed(1)} ms${out ? " (outlier, not in fit)" : ""}`);
+      txt += "\n" + (v === null ? "no pick" : `arrival +${v.toFixed(1)} ms${out ? " (outlier, not in fit)" : ""}`);
     }
     return txt;
   }
