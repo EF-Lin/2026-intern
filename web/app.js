@@ -96,8 +96,8 @@ function ensureEnvelope(e) {
     }
   }
   // statistics from every 7th / 31st sample (enough for percentiles, keeps this fast).
-  // noise[s] = median envelope of station s in the first NOISE_S seconds of the window (before the origin).
-  const noise = new Float64Array(ns), nNoise = Math.min(n, Math.round(NOISE_S * e.fs));
+  // noise[s] = median envelope of station s before the origin (at most the first NOISE_S seconds of the window).
+  const noise = new Float64Array(ns), nNoise = Math.max(1, Math.min(n, Math.round(Math.min(NOISE_S, e.origin - e.t0) * e.fs)));
   for (let s = 0; s < ns; s++) {
     if (!e.scale[s]) continue;
     const v = []; for (let i = 0; i < nNoise; i += 7) v.push(env[i * ns + s]);
@@ -183,7 +183,7 @@ async function loadDay(day) {
   $("badge").textContent = meta.demo ? "DEMO · synthetic data" : "";
   stationDistances();
   buildScene();
-  setT(S.events.length ? S.events[0].origin - 20 : 0);
+  setT(S.events.length ? Math.max(S.events[0].t0, S.events[0].origin - 20) : 0);
   syncSettings(); buildWaterfallImage(); status();
   // background: every hour from the current one outward, then events
   const h0 = Math.floor(S.t / 3600);
@@ -362,7 +362,7 @@ function drawColorbar() {
     const env = [`envelope: sqrt of the centred moving mean of x² over ${S.smooth} s, linear between ${e.fs} Hz samples`, [`filter: ${band}`]];
     const trail = S.trail ? [[`trail: peak of the last ${S.trail} s, fading linearly to 0`]] : [];
     renderList($("cb-title"), snr ? "Envelope SNR (dB)" : `Envelope of filtered amplitude (${S.unit})`, snr
-      ? [[`SNR = 20·log10(envelope / station noise)`], env, [`station noise: median envelope in the first ${NOISE_S} s of the window`],
+      ? [[`SNR = 20·log10(envelope / station noise)`], env, [`station noise: median envelope from the window start to the origin (${Math.min(NOISE_S, e.origin - e.t0).toFixed(0)} s)`],
          [`color range: ${SNR_DB[0]}–${SNR_DB[1]} dB, top ÷ ${S.gain}`], ...trail]
       : [env, [`color range: median envelope of this event window to its 99.9th percentile ÷ ${S.gain}`], ...trail]);
     $("mode-line").textContent = `MODE: event envelope E${e.i + 1}`;
@@ -858,7 +858,7 @@ document.querySelectorAll("[data-step]").forEach((b) => b.onclick = () => setT(S
 // ◀: back to the start of the current event (the last one whose start is before the cursor); if the cursor is
 // already at that start (within 1 s, or ◀ was pressed on it less than 1.5 s ago, so playback cannot defeat a
 // double press), go to the start of the previous event instead.
-const evStart = (e) => e.origin - 20;
+const evStart = (e) => Math.max(e.t0, e.origin - 20);  // 20 s of lead-in, or the window start if the window is shorter
 let lastPrev = null;
 $("prev-ev").onclick = () => {
   let cur = -1;

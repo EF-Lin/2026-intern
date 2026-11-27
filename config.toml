@@ -91,9 +91,10 @@ every = 5            # 每幾個通道合成一個站點（取 RMS 最大值）
 leg_offset = 12      # 折返光纖兩條腿在圖上左右各偏移幾公尺
 frequency = [1, 20]  # 帶通濾波 (Hz)，與 [updown] 相同
 event_fs = 50        # 事件窗波形的取樣率 (Hz)
-event_half = 300     # 事件窗：事件前後各幾秒存波形
-event_clip = [0, 30]  # 事件色階上限 = 發生時間後這段（秒）所有站 |振幅| 的第 99 百分位
+event_half = 15      # 事件窗：事件前後各幾秒存波形（每個事件約 1 MB；±300 s 約 20 MB）
+event_clip = [0, 15]  # 事件色階上限 = 發生時間後這段（秒）所有站 |振幅| 的第 99 百分位
 events = ["2026-07-08T15:47:32"]  # 要存波形的事件（UTC），預設同 events.main
+events_csv = "asset/20260708/ups.csv"  # 再加入此表 Time 欄的事件（UTC）；留空則不用
 counts_to_strain_rate = 0  # counts → ε/s 換算係數；0 = 未知，網頁以 counts 標示
 workers = 6          # web_day 同時處理幾個通道檔（每個約 300 MB 記憶體）
 
@@ -107,6 +108,7 @@ skip = false         # true = 不做
 day = "demo"
 start = "2026-07-08T00:00:00"
 channels = [55, 1631]  # 模擬 0708 有下載的通道範圍，範圍外的站點顯示為無資料
+event_half = 300     # demo 事件窗（秒），與真實資料分開
 seed = 0
 # 假地震：azimuth = 震源方位（度，北起順時針，由測站看向震源），distance = 震央距 (m)，depth = 深度 (m)
 events = [

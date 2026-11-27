@@ -175,7 +175,7 @@ def web_demo():
     sections, origin = load_sections(c["geometry"], leg_offset=c["leg_offset"])
     available = set(range(d["channels"][0], d["channels"][1] + 1))
     stations = build_stations(sections, c["every"], available)
-    log_rms, events = make_demo(stations, d["start"], d["events"], fs=c["event_fs"], half=c["event_half"], seed=d["seed"])
+    log_rms, events = make_demo(stations, d["start"], d["events"], fs=c["event_fs"], half=d.get("event_half", c["event_half"]), seed=d["seed"])
     arrivals = c.get("arrivals", {})
     arrivals = None if arrivals.get("skip") else {k: v for k, v in arrivals.items() if k != "skip"}
     folder = write_day(
@@ -198,7 +198,10 @@ def web_day(folder: str | None = None):
     paths = {ch: p for ch, p in paths.items() if Path(p).is_file()}
     stations = build_stations(sections, c["every"], set(paths))
     start = f"{c['day'][:4]}-{c['day'][4:6]}-{c['day'][6:]}T00:00:00"
-    log_rms, events = build_day(paths, stations, start, c["frequency"], c["events"], c["event_half"], c["event_fs"], workers=c.get("workers", 6))
+    times = list(c["events"]) + ([row["Time"] for row in load_csv(c["events_csv"])] if c.get("events_csv") else [])
+    times = sorted(set(times), key=np.datetime64)  # time order: the page takes the first window that covers the cursor
+    print(f"{len(times)} events")
+    log_rms, events = build_day(paths, stations, start, c["frequency"], times, c["event_half"], c["event_fs"], workers=c.get("workers", 6))
     arrivals = c.get("arrivals", {})
     arrivals = None if arrivals.get("skip") else {k: v for k, v in arrivals.items() if k != "skip"}
     folder = write_day(c["out"], c["day"], start, stations, fiber_lines(sections), log_rms, events, _web_info(c, origin, demo=False), arrivals=arrivals, clip_window=tuple(c["event_clip"]))
