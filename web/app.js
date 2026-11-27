@@ -154,7 +154,7 @@ function stationRGB(s, t) {
   const e = activeEvent(t);
   if (e && e.data && arrivalsOn(e)) { const v = e.arrivals.rel_ms[s]; return v === null ? NO_DATA : seqRGB(v / arrivalMax(e)); }
   if (e && e.data && S.evmode === "envelope" && ensureEnvelope(e)) return rmsRGB(envNorm(e, s, t));
-  if (e && e.data) return sigRGB(Math.max(-1, Math.min(1, eventValue(e, s, t) / (e.vmax * S.k / S.gain))));
+  if (e && e.data) return sigRGB(Math.max(-1, Math.min(1, eventValue(e, s, t) / (signedClip(e, s) * S.k / S.gain))));
   const h = S.hours[Math.floor(t / 3600)];
   if (!h) return NOT_LOADED;
   const q = h[(Math.floor(t) % 3600) * S.nst + s];
@@ -389,9 +389,19 @@ function drawColorbar() {
       : [env, [`color range: median envelope of this event window to its 99.9th percentile ÷ ${S.gain}`], ...trail]);
     $("mode-line").textContent = `MODE: event envelope E${e.i + 1}`;
   } else if (e) {
-    const v = e.vmax * S.k / S.gain;
-    $("cb-lo").textContent = (-v).toPrecision(3); $("cb-mid").textContent = "0"; $("cb-hi").textContent = v.toPrecision(3);
-    $("cb-title").textContent = `Filtered amplitude (${S.unit}), ${band}, ${e.fs} Hz samples. Clip = 99th pct of |amplitude| of all stations from ${e.clip_window ? `${e.clip_window[0]} to +${e.clip_window[1]}` : "the whole window"} s after the origin time ÷ ${S.gain}`;
+    const v = e.vmax * S.k / S.gain, win = e.clip_window ? `${e.clip_window[0]} to +${e.clip_window[1]} s after the origin` : "the whole window";
+    if (EV.norm === "section") {
+      $("cb-lo").textContent = "−clip"; $("cb-mid").textContent = "0"; $("cb-hi").textContent = "+clip";
+      sectionClip(e, 0); // fills e._secClip
+      const fmtC = (c) => `${(c * S.k / S.gain).toPrecision(3)} ${S.unit}`;
+      renderList($("cb-title"), `Filtered amplitude, ${band}, ${e.fs} Hz samples, per section`, [
+        [`clip = each fiber section's own 99th pct of |amplitude| from ${win}, ÷ ${S.gain}`, Object.entries(e._secClip).map(([n, c]) => `${n}: ${fmtC(c)}`)],
+        [`colors compare amplitudes only within a section`],
+      ]);
+    } else {
+      $("cb-lo").textContent = (-v).toPrecision(3); $("cb-mid").textContent = "0"; $("cb-hi").textContent = v.toPrecision(3);
+      $("cb-title").textContent = `Filtered amplitude (${S.unit}), ${band}, ${e.fs} Hz samples. Clip = 99th pct of |amplitude| of all stations from ${win} ÷ ${S.gain}`;
+    }
     $("mode-line").textContent = `MODE: event waveform E${e.i + 1}`;
   } else {
     const [lo, hi] = S.range[S.norm];
@@ -771,6 +781,8 @@ function sectionClip(e, s) {
   }
   return e._secClip[S.meta.stations[s].section] || e.vmax;
 }
+// clip used by the signed colors (3D stations and the event waterfall): one setting for both
+const signedClip = (e, s) => (EV.norm === "section" ? sectionClip(e, s) : e.vmax);
 
 function drawEventView(e) {
   const cv = $("waterfall"), g = cv.getContext("2d"), W = cv.width, H = cv.height, dpr = devicePixelRatio;
@@ -786,7 +798,7 @@ function drawEventView(e) {
   // per-station factor: int16 → n in [-1, 1]
   const f = new Float32Array(nst);
   for (let s = 0; s < nst; s++) {
-    f[s] = e.scale[s] / e.full * S.gain / (EV.norm === "section" ? sectionClip(e, s) : e.vmax);
+    f[s] = e.scale[s] / e.full * S.gain / signedClip(e, s);
   }
   const lut = evLUT(), img = g.createImageData(pw, L.ph), D = img.data;
   const gapC = [255, 255, 255], noC = NO_DATA.map((v) => v * 255), outC = NOT_LOADED.map((v) => v * 255);
@@ -909,7 +921,14 @@ function evUI(e) {
 }
 $("ev-span").onchange = (e) => { EV.span = +e.target.value; S.dirty = true; };
 $("ev-rows").onchange = (e) => { EV.rows = e.target.value; EV.Lkey = ""; S.dirty = true; };
-$("ev-norm").onchange = (e) => { EV.norm = e.target.value; S.dirty = true; };
+// "amplitude" (event bar) and "signed clip" (color panel) are the same setting, kept in sync
+function setNorm(v) {
+  EV.norm = v; $("ev-norm").value = v;
+  document.querySelectorAll("input[name=evnorm]").forEach((r) => r.checked = r.value === v);
+  drawColorbar(); S.dirty = true;
+}
+$("ev-norm").onchange = (e) => setNorm(e.target.value);
+document.querySelectorAll("input[name=evnorm]").forEach((r) => r.onchange = () => setNorm(r.value));
 $("ev-all").onclick = () => setAllSections(true);
 $("ev-none").onclick = () => setAllSections(false);
 $("wf-h").onchange = (e) => { document.documentElement.style.setProperty("--wf-h", `${e.target.value}px`); EV.Lkey = ""; resize(); };
