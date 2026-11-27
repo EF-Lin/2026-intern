@@ -355,7 +355,7 @@ function drawColorbar() {
   }
   const band = S.meta ? `${S.meta.filter.frequency[0]}–${S.meta.filter.frequency[1]} Hz bandpass` : "";
   $("arr-row").hidden = !(e && e.arrivals);
-  $("arr-text").textContent = e && e.arrivals ? arrivalText(e) : "";
+  renderArrivals($("arr-text"), e);
   if (arr) {
     const mx = arrivalMax(e);
     $("cb-lo").textContent = "0"; $("cb-mid").textContent = (mx / 2).toFixed(0); $("cb-hi").textContent = mx.toFixed(0);
@@ -389,20 +389,36 @@ function drawColorbar() {
 }
 
 const angDiff = (a, b) => ((a - b + 540) % 360) - 180;
-function arrivalText(e) {
-  const a = e.arrivals;
-  if (a.baz === undefined) return `E${e.i + 1} plane-wave fit: not enough picks (${a.n_picked}).`;
-  const lines = [
-    `E${e.i + 1} plane-wave fit to first-arrival picks`,
-    `wave comes FROM ${a.baz.toFixed(0)}° ± ${a.baz_err.toFixed(0)}° (clockwise from N)`,
-    `  ± from picks ${a.baz_err_pick.toFixed(0)}°, from ±${a.pos_sigma} m positions ${a.baz_err_position.toFixed(0)}°`,
-    `apparent velocity ${a.v_app.toFixed(0)} ± ${a.v_app_err.toFixed(0)} m/s`,
-    a.incidence !== undefined && a.incidence !== null ? `incidence ${a.incidence.toFixed(0)}° from vertical (hole picks)` : null,
-    `fit residual ${a.residual_ms.toFixed(1)} ms rms, ${a.n_used}/${a.n_picked} picks used`,
-    `fiber is mostly a NNW–SSE line: directions across it are weakly resolved`,
+// plane-wave fit summary as a heading + bullet list (sub-bullets for the ± breakdown)
+function arrivalList(e) {
+  const a = e.arrivals, title = `E${e.i + 1} plane-wave fit to first-arrival picks`;
+  if (a.baz === undefined) return { title, items: [[`not enough picks (${a.n_picked})`]] };
+  const items = [
+    [`wave comes FROM: ${a.baz.toFixed(0)}° ± ${a.baz_err.toFixed(0)}° (clockwise from N)`,
+      [`from picks: ±${a.baz_err_pick.toFixed(0)}°`, `from ±${a.pos_sigma} m channel positions: ±${a.baz_err_position.toFixed(0)}°`]],
+    [`apparent velocity: ${a.v_app.toFixed(0)} ± ${a.v_app_err.toFixed(0)} m/s`],
   ];
-  if (e.source) lines.push(`DEMO truth: ${e.source.azimuth.toFixed(0)}° → error ${angDiff(a.baz, e.source.azimuth).toFixed(1)}°`);
-  return lines.filter((l) => l !== null).join("\n");
+  if (a.incidence !== undefined && a.incidence !== null) items.push([`incidence: ${a.incidence.toFixed(0)}° from vertical (hole picks)`]);
+  items.push([`fit residual: ${a.residual_ms.toFixed(1)} ms rms`]);
+  items.push([`picks used: ${a.n_used} / ${a.n_picked}`]);
+  items.push([`note: the fiber is mostly a NNW–SSE line, so directions across it are weakly resolved`]);
+  if (e.source) items.push([`DEMO truth: ${e.source.azimuth.toFixed(0)}° (error ${angDiff(a.baz, e.source.azimuth).toFixed(1)}°)`]);
+  return { title, items };
+}
+function renderArrivals(el, e) {
+  el.replaceChildren();
+  if (!e || !e.arrivals) return;
+  const { title, items } = arrivalList(e), ul = (rows) => {
+    const u = document.createElement("ul");
+    for (const [text, sub] of rows) {
+      const li = document.createElement("li"); li.textContent = text;
+      if (sub) li.append(ul(sub.map((t) => [t])));
+      u.append(li);
+    }
+    return u;
+  };
+  const h = document.createElement("div"); h.textContent = title;
+  el.append(h, ul(items));
 }
 
 // direction arrow on the ground plane: from the array centre toward where the wave comes from, with ±1σ wedge
