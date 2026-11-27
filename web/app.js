@@ -716,19 +716,14 @@ function drawEventView(e) {
   if (pw < 10 || L.ph < 10) return;
   const nst = S.nst, ta = evC() - EV.span;
   const colK = new Int32Array(pw);
-  let kmin = Infinity, kmax = -Infinity;
   for (let x = 0; x < pw; x++) {
     const k = Math.floor((ta + (x + 0.5) / pw * 2 * EV.span - e.t0) * e.fs);
     colK[x] = k >= 0 && k < e.n ? k : -1;
-    if (colK[x] >= 0) { kmin = Math.min(kmin, k); kmax = Math.max(kmax, k); }
   }
   // per-station factor: int16 → n in [-1, 1]
   const f = new Float32Array(nst);
   for (let s = 0; s < nst; s++) {
-    if (EV.norm === "trace") {
-      let m = 0; for (let k = kmin; k <= kmax; k++) m = Math.max(m, Math.abs(e.data[k * nst + s]));
-      f[s] = m ? S.gain / m : 0;
-    } else f[s] = e.scale[s] / e.full * S.gain / (EV.norm === "section" ? sectionClip(e, s) : e.vmax);
+    f[s] = e.scale[s] / e.full * S.gain / (EV.norm === "section" ? sectionClip(e, s) : e.vmax);
   }
   const lut = evLUT(), img = g.createImageData(pw, L.ph), D = img.data;
   const gapC = [255, 255, 255], noC = NO_DATA.map((v) => v * 255), outC = NOT_LOADED.map((v) => v * 255);
@@ -807,7 +802,6 @@ function evUI(e) {
     $("wf-title").textContent = `Event E${e.i + 1} zoom: filtered amplitude (${S.unit}), ${S.meta.filter.frequency.join("–")} Hz, ${e.fs} Hz samples, ±${EV.span} s around the cursor (vertical line), color = ${{
       clip: "colorbar above (one clip for all stations)",
       section: "seismic, each fiber section / leg clipped at its own 99th pct of |amplitude| in the clip window after the origin (compare amplitudes only within a section)",
-      trace: "seismic, each row scaled to its own max |amplitude| in this window (no amplitude comparison between rows)",
     }[EV.norm]}. ${rows} Click or drag: move the crosshair (time + station); the window stays put until you play or leave it. ←/→ = ∓0.1 s.`;
   } else $("wf-title").textContent = `2D waterfall: stations in fiber order (rows) × time (UTC+8). Per-minute max of the 1 s RMS, same color scale as above. Click or drag to move the crosshair (time + station). Inside an event window (gray on the timeline) this becomes the event zoom view.`;
 }
