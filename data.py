@@ -186,8 +186,13 @@ def web_demo():
 
 @timer
 def web_day(folder: str | None = None):
-    """真實 MiniSEED 一整天 -> 網站格式 web/data/<day>/。folder 省略時用 [search] folder。"""
+    """
+    真實 MiniSEED 一整天 -> 網站格式 web/data/<day>/。folder 省略時用 [search] folder。
+    慢的部分（讀檔 + 濾波）存在 [web] cache/<day>/：第一次整天跑一次（約 5 分鐘），之後只算缺的事件窗，
+    改主震 / 色階 / 挑時設定只需數秒。
+    """
     from src.web import build_stations, fiber_lines, load_sections, write_day
+    from src.web.cache import DayCache
     from src.web.real import build_day
 
     c = cfg["web"]
@@ -201,7 +206,8 @@ def web_day(folder: str | None = None):
     times = list(c["events"]) + ([row["Time"] for row in load_csv(c["events_csv"])] if c.get("events_csv") else [])
     times = sorted(set(times), key=np.datetime64)  # time order (E1, E2, … on the page)
     print(f"{len(times)} events")
-    log_rms, events = build_day(paths, stations, start, c["frequency"], times, c["event_half"], c["event_fs"], workers=c.get("workers", 6))
+    cache = DayCache(Path(c["cache"]) / c["day"], day_start=start, frequency=c["frequency"], stations=stations, channels=paths, half=c["event_half"]) if c.get("cache") else None
+    log_rms, events = build_day(paths, stations, start, c["frequency"], times, c["event_half"], c["event_fs"], workers=c.get("workers", 6), cache=cache)
     for ev in events:
         if np.datetime64(ev["time"]) == np.datetime64(c.get("main_shock") or "NaT"):
             ev["label"] = "main shock"
