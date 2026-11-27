@@ -39,6 +39,7 @@ def write_day(
     events: list[dict],
     info: dict,
     arrivals: dict | None = None,
+    clip_window: tuple[float, float] = (0.0, 30.0),
 ) -> Path:
     """
     log_rms: (86400, n_st) float log10 of 1 s RMS in counts, NaN where there is no data.
@@ -46,6 +47,9 @@ def write_day(
     info: extra meta (filter, units, origin, …) merged into meta.json.
     arrivals: keyword arguments for `event_arrivals` (e.g. {"half": 2, "pos_sigma": 100}); None = skip the
     first-arrival picks / plane-wave fit stored as events[k].arrivals (see src/web/arrivals.py).
+    clip_window: seconds relative to the event origin whose |amplitude| sets the shared color clip (vmax = 99th
+    percentile over all stations with data). Using the earthquake part, not the whole mostly-noise window, keeps the
+    clip from collapsing onto the surface noise level.
     """
     folder = Path(out) / day
     folder.mkdir(parents=True, exist_ok=True)
@@ -71,10 +75,13 @@ def write_day(
         scale = np.abs(data).max(axis=0)
         safe = np.where(scale > 0, scale, 1.0)
         np.round(data / safe * EVENT_FULL).astype(np.int16).tofile(folder / f"event_{k}.bin")
-        nonzero = np.abs(data[:, scale > 0])
+        t_hint = float((np.datetime64(ev["time"]) - np.datetime64(ev["start"])) / np.timedelta64(1, "ms")) / 1e3
+        i0, i1 = (min(len(data), max(0, int(round((t_hint + w) * ev["fs"])))) for w in clip_window)
+        if i1 <= i0:  # window outside the stored data: fall back to all of it
+            i0, i1 = 0, len(data)
+        nonzero = np.abs(data[i0:i1, scale > 0])
         arr = {}
         if arrivals is not None:
-            t_hint = float((np.datetime64(ev["time"]) - np.datetime64(ev["start"])) / np.timedelta64(1, "ms")) / 1e3
             arr = {"arrivals": event_arrivals(stations, data, ev["fs"], t_hint, **arrivals)}
         ev_meta.append(
             dict(
@@ -87,6 +94,7 @@ def write_day(
                 full=EVENT_FULL,
                 scale=[round(float(v), 4) for v in scale],
                 vmax=round(float(np.percentile(nonzero, 99)), 4) if nonzero.size else 1.0,
+                clip_window=[float(w) for w in clip_window],
             )
             | ({"source": ev["source"]} if "source" in ev else {})  # demo only: the true source, to check direction estimates
             | arr

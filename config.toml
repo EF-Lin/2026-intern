@@ -92,6 +92,7 @@ leg_offset = 12      # 折返光纖兩條腿在圖上左右各偏移幾公尺
 frequency = [1, 20]  # 帶通濾波 (Hz)，與 [updown] 相同
 event_fs = 50        # 事件窗波形的取樣率 (Hz)
 event_half = 300     # 事件窗：事件前後各幾秒存波形
+event_clip = [0, 30]  # 事件色階上限 = 發生時間後這段（秒）所有站 |振幅| 的第 99 百分位
 events = ["2026-07-08T15:47:32"]  # 要存波形的事件（UTC），預設同 events.main
 counts_to_strain_rate = 0  # counts → ε/s 換算係數；0 = 未知，網頁以 counts 標示
 

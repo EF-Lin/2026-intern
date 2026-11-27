@@ -91,3 +91,20 @@ def test_demo_shapes(geometry):
     # the event is louder than the noise just before its window
     w = int(5 * 3600)
     assert np.nanmean(log_rms[w : w + 15]) > np.nanmean(log_rms[w - 60 : w - 30])
+
+
+def test_event_clip_uses_window_after_origin(tmp_path, geometry):
+    sections, _ = load_sections(geometry)
+    stations = build_stations(sections, every=5)
+    n = len(stations)
+    log_rms = np.ones((SECONDS_PER_DAY, n))
+    data = np.ones((50 * 60, n))  # 60 s at 50 Hz: quiet noise of 1 count ...
+    data[50 * 30 : 50 * 35] = 100.0  # ... and a 5 s burst of 100 counts starting at the origin (30 s in)
+    ev = [dict(time="2026-07-08T01:00:30", start="2026-07-08T01:00:00.000", fs=50, data=data)]
+    folder = write_day(tmp_path, "d", "2026-07-08T00:00:00", stations, fiber_lines(sections), log_rms, ev, {}, clip_window=(0, 5))
+    e = json.loads((folder / "meta.json").read_text(encoding="utf-8"))["events"][0]
+    assert e["vmax"] == pytest.approx(100) and e["clip_window"] == [0, 5]
+    # over the whole window the burst is only 1/12 of the samples, so the 99th percentile would be the burst too;
+    # a window before the origin sees only the noise
+    folder = write_day(tmp_path, "d2", "2026-07-08T00:00:00", stations, fiber_lines(sections), log_rms, ev, {}, clip_window=(-20, -10))
+    assert json.loads((folder / "meta.json").read_text(encoding="utf-8"))["events"][0]["vmax"] == pytest.approx(1)

@@ -369,7 +369,7 @@ function drawColorbar() {
   } else if (e) {
     const v = e.vmax * S.k / S.gain;
     $("cb-lo").textContent = (-v).toPrecision(3); $("cb-mid").textContent = "0"; $("cb-hi").textContent = v.toPrecision(3);
-    $("cb-title").textContent = `Filtered amplitude (${S.unit}), ${band}, ${e.fs} Hz samples. Clip = 99th pct of |amplitude| in this event ÷ ${S.gain}`;
+    $("cb-title").textContent = `Filtered amplitude (${S.unit}), ${band}, ${e.fs} Hz samples. Clip = 99th pct of |amplitude| of all stations from ${e.clip_window ? `${e.clip_window[0]} to +${e.clip_window[1]}` : "the whole window"} s after the origin time ÷ ${S.gain}`;
     $("mode-line").textContent = `MODE: event waveform E${e.i + 1}`;
   } else {
     const [lo, hi] = S.range[S.norm];
