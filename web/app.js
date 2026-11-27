@@ -689,6 +689,26 @@ function evLUT() { // 256 colors over n in [-1, 1]
   lutFor = S.cmap; return LUT;
 }
 
+// "per section" clip: like the event clip (99th pct of |amplitude| over the clip window after the origin), but computed
+// separately for each fiber section / leg, so quiet sections (the holes) use their own scale. Cached per event.
+function sectionClip(e, s) {
+  if (!e._secClip) {
+    const cw = e.clip_window || [0, (e.n / e.fs) - (e.origin - e.t0)];
+    const i0 = Math.max(0, Math.round((e.origin - e.t0 + cw[0]) * e.fs)), i1 = Math.min(e.n, Math.round((e.origin - e.t0 + cw[1]) * e.fs));
+    const groups = {};
+    S.meta.stations.forEach((st, j) => { if (st.has_data && e.scale[j]) (groups[st.section] ||= []).push(j); });
+    e._secClip = {};
+    for (const [name, idx] of Object.entries(groups)) {
+      const v = new Float32Array((i1 - i0) * idx.length);
+      let p = 0;
+      for (let i = i0; i < i1; i++) for (const j of idx) v[p++] = Math.abs(e.data[i * S.nst + j] * e.scale[j] / e.full);
+      v.sort();
+      e._secClip[name] = v[Math.min(v.length - 1, Math.floor(0.99 * v.length))] || e.vmax;
+    }
+  }
+  return e._secClip[S.meta.stations[s].section] || e.vmax;
+}
+
 function drawEventView(e) {
   const cv = $("waterfall"), g = cv.getContext("2d"), W = cv.width, H = cv.height, dpr = devicePixelRatio;
   g.clearRect(0, 0, W, H);
@@ -708,7 +728,7 @@ function drawEventView(e) {
     if (EV.norm === "trace") {
       let m = 0; for (let k = kmin; k <= kmax; k++) m = Math.max(m, Math.abs(e.data[k * nst + s]));
       f[s] = m ? S.gain / m : 0;
-    } else f[s] = e.scale[s] / e.full * S.gain / e.vmax;
+    } else f[s] = e.scale[s] / e.full * S.gain / (EV.norm === "section" ? sectionClip(e, s) : e.vmax);
   }
   const lut = evLUT(), img = g.createImageData(pw, L.ph), D = img.data;
   const gapC = [255, 255, 255], noC = NO_DATA.map((v) => v * 255), outC = NOT_LOADED.map((v) => v * 255);
@@ -784,7 +804,11 @@ function evUI(e) {
     const rows = EV.rows === "sections"
       ? "Rows: one panel per fiber section; y = distance along the section (m) from its first channel (back legs flipped onto their forth leg; holes: depth). Every panel uses the same m/px, so equal slope = equal apparent velocity."
       : "Rows: stations in fiber order (as in the day view).";
-    $("wf-title").textContent = `Event E${e.i + 1} zoom: filtered amplitude (${S.unit}), ${S.meta.filter.frequency.join("–")} Hz, ${e.fs} Hz samples, ±${EV.span} s around the cursor (vertical line), color = colorbar above${EV.norm === "trace" ? ", but each row scaled to its own max |amplitude| in this window" : ""}. ${rows} Click or drag: move the crosshair (time + station); the window stays put until you play or leave it. ←/→ = ∓0.1 s.`;
+    $("wf-title").textContent = `Event E${e.i + 1} zoom: filtered amplitude (${S.unit}), ${S.meta.filter.frequency.join("–")} Hz, ${e.fs} Hz samples, ±${EV.span} s around the cursor (vertical line), color = ${{
+      clip: "colorbar above (one clip for all stations)",
+      section: "seismic, each fiber section / leg clipped at its own 99th pct of |amplitude| in the clip window after the origin (compare amplitudes only within a section)",
+      trace: "seismic, each row scaled to its own max |amplitude| in this window (no amplitude comparison between rows)",
+    }[EV.norm]}. ${rows} Click or drag: move the crosshair (time + station); the window stays put until you play or leave it. ←/→ = ∓0.1 s.`;
   } else $("wf-title").textContent = `2D waterfall: stations in fiber order (rows) × time (UTC+8). Per-minute max of the 1 s RMS, same color scale as above. Click or drag to move the crosshair (time + station). Inside an event window (gray on the timeline) this becomes the event zoom view.`;
 }
 
