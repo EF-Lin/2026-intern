@@ -394,6 +394,7 @@ function arrivalList(e) {
   if (a.incidence !== undefined && a.incidence !== null) items.push([`incidence: ${a.incidence.toFixed(0)}° from vertical (hole picks)`]);
   items.push([`fit residual: ${a.residual_ms.toFixed(1)} ms rms`]);
   items.push([`picks used: ${a.n_used} / ${a.n_picked}`]);
+  if (a.fs) items.push([`picked on ${a.fs} Hz samples`]);
   items.push([`note: the fiber is mostly a NNW–SSE line, so directions across it are weakly resolved`]);
   if (e.source) items.push([`DEMO truth: ${e.source.azimuth.toFixed(0)}° (error ${angDiff(a.baz, e.source.azimuth).toFixed(1)}°)`]);
   return { title, items };

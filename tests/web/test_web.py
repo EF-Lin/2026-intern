@@ -80,6 +80,18 @@ def test_write_day_layout(tmp_path, geometry):
     assert json.loads((tmp_path / "index.json").read_text()) == ["d"]
 
 
+def test_write_day_picks_on_pick_data(tmp_path, geometry):
+    sections, _ = load_sections(geometry)
+    stations = build_stations(sections, every=5)
+    n = len(stations)
+    rng = np.random.default_rng(1)
+    hi = rng.normal(0, 1, (1000, n))
+    ev = [dict(time="2026-07-08T01:00:05", start="2026-07-08T01:00:00.000", fs=50, data=hi[::2], pick=dict(fs=100, data=hi))]
+    folder = write_day(tmp_path, "d", "2026-07-08T00:00:00", stations, fiber_lines(sections), np.ones((SECONDS_PER_DAY, n)), ev, {}, arrivals={"half": 0})
+    e = json.loads((folder / "meta.json").read_text(encoding="utf-8"))["events"][0]
+    assert e["fs"] == 50 and e["n"] == 500 and e["arrivals"]["fs"] == 100
+
+
 def test_demo_shapes(geometry):
     sections, _ = load_sections(geometry)
     stations = build_stations(sections, every=5, available=set(range(0, 25)))

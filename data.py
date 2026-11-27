@@ -1,6 +1,7 @@
 """MiDAS 資料處理任務。參數集中在 config.toml，修改最下方 __main__ 選擇要跑的任務。"""
 
 from functools import cache
+from pathlib import Path
 
 import numpy as np
 from tqdm import tqdm
@@ -181,6 +182,27 @@ def web_demo():
         c["out"], d["day"], d["start"], stations, fiber_lines(sections), log_rms, events, _web_info(c, origin, demo=True), arrivals=arrivals, clip_window=tuple(c["event_clip"])
     )
     print(f"{len(stations)} stations -> {folder}")
+
+
+@timer
+def web_day(folder: str | None = None):
+    """真實 MiniSEED 一整天 -> 網站格式 web/data/<day>/。folder 省略時用 [search] folder。"""
+    from src.web import build_stations, fiber_lines, load_sections, write_day
+    from src.web.real import build_day
+
+    c = cfg["web"]
+    s = Search(folder=folder or cfg["search"]["folder"], filename=cfg["search"].get("filename"), year=cfg["search"].get("year", 2026), julday=cfg["search"].get("julday", 189))
+    sections, origin = load_sections(c["geometry"], leg_offset=c["leg_offset"])
+    every = build_stations(sections, c["every"])
+    paths = {ch: s._path(ch) for st in every for ch in st["channels"]}
+    paths = {ch: p for ch, p in paths.items() if Path(p).is_file()}
+    stations = build_stations(sections, c["every"], set(paths))
+    start = f"{c['day'][:4]}-{c['day'][4:6]}-{c['day'][6:]}T00:00:00"
+    log_rms, events = build_day(paths, stations, start, c["frequency"], c["events"], c["event_half"], c["event_fs"], workers=c.get("workers", 6))
+    arrivals = c.get("arrivals", {})
+    arrivals = None if arrivals.get("skip") else {k: v for k, v in arrivals.items() if k != "skip"}
+    folder = write_day(c["out"], c["day"], start, stations, fiber_lines(sections), log_rms, events, _web_info(c, origin, demo=False), arrivals=arrivals, clip_window=tuple(c["event_clip"]))
+    print(f"{len(paths)} channels, {len(stations)} stations -> {folder}")
 
 
 if __name__ == "__main__":

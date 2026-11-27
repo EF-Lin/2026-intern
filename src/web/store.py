@@ -43,7 +43,8 @@ def write_day(
 ) -> Path:
     """
     log_rms: (86400, n_st) float log10 of 1 s RMS in counts, NaN where there is no data.
-    events: [{"time": ISO origin, "start": ISO first sample, "fs": Hz, "data": (n_samp, n_st) float counts}].
+    events: [{"time": ISO origin, "start": ISO first sample, "fs": Hz, "data": (n_samp, n_st) float counts,
+              "pick": optional {"fs": Hz, "data": same window at a higher rate, used for the first-arrival picks}}].
     info: extra meta (filter, units, origin, …) merged into meta.json.
     arrivals: keyword arguments for `event_arrivals` (e.g. {"half": 2, "pos_sigma": 100}); None = skip the
     first-arrival picks / plane-wave fit stored as events[k].arrivals (see src/web/arrivals.py).
@@ -81,8 +82,9 @@ def write_day(
             i0, i1 = 0, len(data)
         nonzero = np.abs(data[i0:i1, scale > 0])
         arr = {}
-        if arrivals is not None:
-            arr = {"arrivals": event_arrivals(stations, data, ev["fs"], t_hint, **arrivals)}
+        if arrivals is not None:  # real data: pick on the original sampling ("pick"), store the decimated trace
+            pk = ev.get("pick") or {"data": data, "fs": ev["fs"]}
+            arr = {"arrivals": event_arrivals(stations, np.asarray(pk["data"], dtype=float), pk["fs"], t_hint, **arrivals) | {"fs": pk["fs"]}}
         ev_meta.append(
             dict(
                 time=ev["time"],
