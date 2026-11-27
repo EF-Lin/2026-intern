@@ -7,6 +7,7 @@ A project aim to process DAS (Distributed Acoustic Sensing, 分散式光纖聲�
 - GIF images of waterfall and wave
 - Analyze data by PhaseNet DAS or Cross Correlation
 - Separate up-going and down-going waves of borehole fiber (f-k filter), with waterfall, f-k and wiggle plots
+- Web viewer: a whole day of MiDAS on the 3D fiber route, with timeline playback, waterfalls and event views
 
 ## Installation
 ### pip
@@ -84,6 +85,24 @@ uv run pytest
 
 PhaseNet-DAS (`src.analysis.Phase`) additionally requires `DAS_ML`, which is not on PyPI.
 
+### Web viewer
+A static website that shows one day of MiDAS data on the fiber route in 3D (Hole A / B going down).
+Stations (every 5 channels) are colored by amplitude at the cursor time; drag the timeline or play to watch waves
+cross the fiber. The website never reads MiniSEED: `web_day` first converts the day into small files (0708: 17 GB of
+MiniSEED → about 86 MB).
+
+```bash
+uv run python -c "import data; data.web_day()"   # MiniSEED day -> web/data/<day>/ (settings: [web] in config.toml)
+uv run python -m http.server 8765 -d web         # then open http://localhost:8765/?day=20260708
+```
+- Filter: 1–20 Hz bandpass (same as the waterfall plots), then 1 s RMS for the whole day and 50 Hz waveforms (int16) for ±15 s around each event (`[web] events` + `events_csv`, e.g. `asset/20260708/ups.csv`).
+- Times are shown in Taiwan time (UTC+8); amplitudes are in counts.
+- Event views: envelope (SNR vs each station's noise) or signed amplitude, with one color clip for all stations or one per fiber section; a zoom waterfall with a choice of sections; first-arrival picks with a plane-wave fit (back-azimuth, apparent velocity) computed on the 100 Hz data. The direction is only as good as the channel positions (about ±100 m).
+- The main shock (`main_shock` in `[web]`) is marked orange.
+- The slow part (reading + filtering every channel) is cached in `web/cache/<day>/` (about 250 MB): the first run takes about 5 minutes, later runs about 10 s, and adding one event about 25 s.
+- The fiber route and channel positions come from `asset/fiber_geometry.csv` (built from the KMZ; edit it to correct positions).
+- `uv run python -c "import data; data.web_demo()"` writes a synthetic day (`?day=demo`) without reading any MiniSEED.
+
 ## Project Structure
 ```bash
 .
@@ -91,7 +110,9 @@ PhaseNet-DAS (`src.analysis.Phase`) additionally requires `DAS_ML`, which is not
 │   ├── analysis/     # Analyze data (cross correlation, PhaseNet DAS, up/down-going separation)
 │   ├── door/         # Search, load and transform data
 │   ├── plot/         # Generate figures (wave, waterfall, f-k, wiggle, histogram)
-│   └── utils/        # Other tools
+│   ├── utils/        # Other tools
+│   └── web/          # Web viewer data export (geometry, MiniSEED -> site files, cache, arrival picks)
+├── web/              # Web viewer (index.html, app.js, style.css); data in web/data/<day>/ (not in git)
 ├── config.toml       # Event times, fiber segments and task parameters
 ├── tests/
 ├── data.py           # Processing tasks
@@ -108,3 +129,4 @@ PhaseNet-DAS (`src.analysis.Phase`) additionally requires `DAS_ML`, which is not
 - 2026/08/25, PhaseNet DAS feature
 - 2026/08/29, Cross correlation feature
 - 2026/11/24, Up-going / down-going wave separation and wiggle plot
+- 2026/11/27, Web viewer of a whole MiDAS day (3D fiber route, event views, arrival-time direction estimate)
