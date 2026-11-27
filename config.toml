@@ -95,6 +95,7 @@ event_half = 15      # 事件窗：事件前後各幾秒存波形（每個事件
 event_clip = [0, 15]  # 事件色階上限 = 發生時間後這段（秒）所有站 |振幅| 的第 99 百分位
 events = ["2026-07-08T15:47:32"]  # 要存波形的事件（UTC），預設同 events.main
 events_csv = "asset/20260708/ups.csv"  # 再加入此表 Time 欄的事件（UTC）；留空則不用
+main_shock = "2026-07-08T15:47:32"  # 網頁以橘色標記的主震（須在上面的事件中）；留空則不標
 counts_to_strain_rate = 0  # counts → ε/s 換算係數；0 = 未知，網頁以 counts 標示
 workers = 6          # web_day 同時處理幾個通道檔（每個約 300 MB 記憶體）
 

@@ -81,6 +81,12 @@ def write_day(
         if i1 <= i0:  # window outside the stored data: fall back to all of it
             i0, i1 = 0, len(data)
         nonzero = np.abs(data[i0:i1, scale > 0])
+        # "per section" color clip for the page: the same percentile, per fiber section / leg
+        groups: dict[str, list[int]] = {}
+        for j, s in enumerate(stations):
+            if s.get("has_data", True) and scale[j] > 0:
+                groups.setdefault(s["section"], []).append(j)
+        section_clip = {name: round(float(np.percentile(np.abs(data[i0:i1, idx]), 99)), 4) for name, idx in groups.items()}
         arr = {}
         if arrivals is not None:  # real data: pick on the original sampling ("pick"), store the decimated trace
             pk = ev.get("pick") or {"data": data, "fs": ev["fs"]}
@@ -97,7 +103,9 @@ def write_day(
                 scale=[round(float(v), 4) for v in scale],
                 vmax=round(float(np.percentile(nonzero, 99)), 4) if nonzero.size else 1.0,
                 clip_window=[float(w) for w in clip_window],
+                section_clip=section_clip,
             )
+            | ({"label": ev["label"]} if ev.get("label") else {})  # e.g. "main shock": highlighted on the page
             | ({"source": ev["source"]} if "source" in ev else {})  # demo only: the true source, to check direction estimates
             | arr
         )

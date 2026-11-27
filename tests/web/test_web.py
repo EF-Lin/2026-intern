@@ -92,6 +92,20 @@ def test_write_day_picks_on_pick_data(tmp_path, geometry):
     assert e["fs"] == 50 and e["n"] == 500 and e["arrivals"]["fs"] == 100
 
 
+def test_write_day_section_clip_and_label(tmp_path, geometry):
+    sections, _ = load_sections(geometry)
+    stations = build_stations(sections, every=5)
+    n = len(stations)
+    data = np.ones((500, n))
+    hole = [j for j, s in enumerate(stations) if s["section"] == "Hole (down)"]
+    data[:, hole] = 0.1  # a quiet section gets its own, smaller clip
+    ev = [dict(time="2026-07-08T01:00:02", start="2026-07-08T01:00:00.000", fs=50, data=data, label="main shock")]
+    folder = write_day(tmp_path, "d", "2026-07-08T00:00:00", stations, fiber_lines(sections), np.ones((SECONDS_PER_DAY, n)), ev, {}, clip_window=(0, 5))
+    e = json.loads((folder / "meta.json").read_text(encoding="utf-8"))["events"][0]
+    assert e["section_clip"] == pytest.approx({"Surface B (forth)": 1.0, "Hole (down)": 0.1})
+    assert e["label"] == "main shock"
+
+
 def test_demo_shapes(geometry):
     sections, _ = load_sections(geometry)
     stations = build_stations(sections, every=5, available=set(range(0, 25)))

@@ -13,7 +13,7 @@ input[type=number] { width: 6em; }
 input[type=radio] { border: 0; }
 
 :root { --wf-h: 260px; }
-main { display: flex; height: calc(100vh - 200px - var(--wf-h)); min-height: 360px; }
+main { display: flex; height: calc(100vh - 222px - var(--wf-h)); min-height: 360px; }
 #scene-box { position: relative; flex: 1; min-width: 0; border-right: 1px solid #000; }
 #scene { position: absolute; inset: 0; }
 #views { position: absolute; top: 6px; left: 6px; display: flex; gap: 4px; }
@@ -30,6 +30,9 @@ canvas { display: block; width: 100%; }
 #waterfall { height: var(--wf-h); }
 #ev-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; border: 1px solid #000; border-top: 0; padding: 2px 4px; }
 #ev-state { font-weight: bold; }
+#ev-secs-bar { border: 1px solid #000; border-top: 0; padding: 2px 4px; font-size: 12px; }
+#ev-secs label { margin-right: 10px; white-space: nowrap; }
+#ev-secs-bar button { font-size: 12px; padding: 0 4px; }
 #wf-hover { white-space: pre; font-size: 12px; }
 #colorbar { border: 1px solid #000; }
 .cb-ticks { display: flex; justify-content: space-between; }

@@ -57,9 +57,14 @@ function rmsNorm(q, s) { // q (uint8) → [0,1] under current norm/range, or nul
   const [lo, hi] = S.range[S.norm];
   return (v - lo) / (hi - lo);
 }
-function activeEvent(t) {
-  for (const e of S.events) if (t >= e.t0 && t < e.t0 + e.n / e.fs) return e;
-  return null;
+const inWindow = (e, t) => t >= e.t0 && t < e.t0 + e.n / e.fs;
+let evPin = null; // the event reached with ◀ / ▶ stays shown while the cursor is inside its window
+function activeEvent(t) { // windows can overlap (events < 2·half apart): otherwise take the one whose origin is nearest
+  if (evPin && inWindow(evPin, t)) return evPin;
+  evPin = null;
+  let best = null;
+  for (const e of S.events) if (t >= e.t0 && t < e.t0 + e.n / e.fs && (!best || Math.abs(t - e.origin) < Math.abs(t - best.origin))) best = e;
+  return best;
 }
 // sample position u = (t - t0)·fs is fractional: values are linearly interpolated between the 50 Hz samples,
 // so slow-motion playback moves smoothly instead of stepping every 20 ms.
@@ -80,10 +85,16 @@ function eventValue(e, s, t) { // counts (or ε/s), null if not loaded
 // quiet borehole stations light up alike (a linear scale is set by the strong borehole arrivals and leaves the
 // surface white).
 const NOISE_S = 200, SNR_DB = [6, 26];
+const MAIN_COLOR = "#e07000"; // orange: the main shock (events with a label); red / blue belong to the data, red to the cursor
+const ENV_KEEP = 8, envKept = []; // envelopes of the last few events (~2 MB each at ±15 s), so switching back is free
+function keepEnvelope(e) {
+  const k = envKept.indexOf(e); if (k >= 0) envKept.splice(k, 1);
+  envKept.push(e);
+  while (envKept.length > ENV_KEEP) envKept.shift().env = null;
+}
 function ensureEnvelope(e) {
   if (!e.data) return null;
-  if (e.env && e.envSmooth === S.smooth) return e.env;
-  for (const o of S.events) if (o !== e) o.env = null; // keep only one in memory
+  if (e.env && e.envSmooth === S.smooth) { keepEnvelope(e); return e.env; }
   const n = e.n, ns = S.nst, w = Math.max(1, Math.round(S.smooth * e.fs)), h = Math.floor(w / 2);
   const env = new Float32Array(n * ns), sq = new Float64Array(n + 1);
   for (let s = 0; s < ns; s++) {
@@ -108,6 +119,7 @@ function ensureEnvelope(e) {
   all.sort((a, b) => a - b);
   const pct = (p) => all[Math.min(all.length - 1, Math.floor(p / 100 * all.length))];
   Object.assign(e, { env, noise, envSmooth: S.smooth, envCounts: [pct(50), pct(99.9)] });
+  keepEnvelope(e);
   setTimeout(drawColorbar);
   return env;
 }
@@ -158,6 +170,15 @@ async function ensureHour(h) {
   S.hours[h] = await bin(S.meta.rms.files[h], Uint8Array);
   S.dirty = true; status();
 }
+// after an event switch, while the browser is idle: load the previous / next event and compute their envelopes,
+// so the ◀ / ▶ buttons land on ready data
+function prefetchNeighbours(e) {
+  const idle = window.requestIdleCallback || ((f) => setTimeout(f, 50));
+  for (const n of [S.events[e.i + 1], S.events[e.i - 1]]) {
+    if (!n) continue;
+    idle(async () => { await ensureEvent(n); if (n.data && S.evmode === "envelope") ensureEnvelope(n); });
+  }
+}
 async function ensureEvent(e) {
   if (e.data || loading.has(e.file)) return;
   loading.add(e.file);
@@ -179,6 +200,7 @@ async function loadDay(day) {
   S.logK = Math.log10(S.k);
   S.range.abs = meta.rms.default_range.map((v) => +(v + S.logK).toFixed(2));
   S.range.rel = [0, 30];
+  evPin = null; envKept.length = 0;
   S.events = meta.events.map((e, i) => ({ ...e, i, t0: (parseUTC(e.start) - dayMs) / 1000, origin: (parseUTC(e.time) - dayMs) / 1000, data: null }));
   $("badge").textContent = meta.demo ? "DEMO · synthetic data" : "";
   stationDistances();
@@ -531,15 +553,30 @@ function drawTimeline() {
   const cv = $("timeline"), g = cv.getContext("2d"), W = cv.width, H = cv.height, dpr = devicePixelRatio;
   g.clearRect(0, 0, W, H);
   const top = 4 * dpr, bot = H - 18 * dpr;
-  for (const e of S.events) { // event windows
-    g.fillStyle = "#e0e0e0"; const x0 = xOf(e.t0, W), x1 = xOf(e.t0 + e.n / e.fs, W);
-    g.fillRect(x0, top, Math.max(2, x1 - x0), bot - top);
-    g.fillStyle = "#000"; g.font = `${10 * dpr}px Courier New`; g.fillText(`E${e.i + 1}`, x1 + 2, top + 10 * dpr);
-  }
+  // event windows: gray; labelled events (main shock) orange, on top. Labels go over the RMS curve; event numbers
+  // that would overlap the previous one are skipped (57 events in a day); the main-shock label always shows, boxed.
+  const evX0 = (e) => xOf(e.t0, W), evX1 = (e) => xOf(e.t0 + e.n / e.fs, W);
+  g.fillStyle = "#e0e0e0";
+  for (const e of S.events) g.fillRect(evX0(e), top, Math.max(2, evX1(e) - evX0(e)), bot - top);
+  g.fillStyle = MAIN_COLOR;
+  for (const e of S.events) if (e.label) g.fillRect(evX0(e) - dpr, top, Math.max(4 * dpr, evX1(e) - evX0(e)), bot - top);
   if (maxCurve) {
     g.strokeStyle = "#000"; g.lineWidth = 1; g.beginPath();
     for (let m = 0; m < 1440; m++) { const x = xOf(m * 60 + 30, W), y = bot - maxCurve[m] / 255 * (bot - top); m ? g.lineTo(x, y) : g.moveTo(x, y); }
     g.stroke();
+  }
+  g.font = `${10 * dpr}px Courier New`; g.fillStyle = "#000";
+  let free = -Infinity;
+  for (const e of S.events) {
+    const txt = `E${e.i + 1}`, x = evX1(e) + 2 * dpr;
+    if (!e.label && x >= free) { g.fillText(txt, x, top + 10 * dpr); free = x + g.measureText(txt).width + 3 * dpr; }
+  }
+  g.font = `bold ${10 * dpr}px Courier New`;
+  for (const e of S.events) {
+    if (!e.label) continue;
+    const txt = `E${e.i + 1} ${e.label}`, w = g.measureText(txt).width, x = Math.min(evX1(e) + 3 * dpr, W - w - 2 * dpr), y = top + 10 * dpr;
+    g.fillStyle = "#fff"; g.fillRect(x - 2 * dpr, y - 9 * dpr, w + 4 * dpr, 12 * dpr);
+    g.fillStyle = MAIN_COLOR; g.fillText(txt, x, y);
   }
   g.strokeStyle = "#000"; g.beginPath(); g.moveTo(xOf(0, W), bot); g.lineTo(xOf(S.meta.seconds, W), bot); g.stroke();
   timeTicks(g, W, H, bot);
@@ -580,7 +617,7 @@ dragTime($("timeline"));
 // ---------- event zoom waterfall (replaces the day waterfall while the cursor is inside an event window) ----------
 // Rows are either stations in fiber order, or one panel per fiber section with y = distance along the section (m).
 // In section mode every panel shares one m/px scale, so equal slopes mean equal apparent velocities.
-const EV = { span: 3, rows: "sections", norm: "clip", L: null, Lkey: "", anchor: null, dragEv: false };
+const EV = { span: 3, rows: "sections", norm: "clip", L: null, Lkey: "", anchor: null, dragEv: false, hide: new Set() }; // hide: section names unticked
 const EV_TOP = 4, EV_BOT = 30; // css px above / below the image (bottom: time axis)
 let SECS = []; // fiber sections that carry stations: {name, idx (station ids sorted by dist), len, hole, lo, hi}
 
@@ -619,24 +656,44 @@ function stationDistances() {
     sec.lo = lo; sec.hi = hi;
   }
   EV.Lkey = "";
+  buildSectionBoxes();
 }
+// one checkbox per fiber section (with data) in the event bar; unticked sections are left out of the event view
+function buildSectionBoxes() {
+  const box = $("ev-secs"); box.replaceChildren();
+  const short = (n) => n.replace("(forth)", "fwd").replace("(back)", "back").replace(/[()]/g, "");
+  for (const sec of SECS.filter((s) => s.has)) {
+    const lab = document.createElement("label"), cb = document.createElement("input");
+    cb.type = "checkbox"; cb.checked = !EV.hide.has(sec.name);
+    cb.onchange = () => { cb.checked ? EV.hide.delete(sec.name) : EV.hide.add(sec.name); S.dirty = true; };
+    lab.append(cb, short(sec.name)); box.append(lab);
+  }
+}
+const setAllSections = (on) => {
+  EV.hide = on ? new Set() : new Set(SECS.map((s) => s.name));
+  $("ev-secs").querySelectorAll("input").forEach((cb) => cb.checked = on); S.dirty = true;
+};
 const secOf = (name) => SECS.find((s) => s.name === name);
 const nearestIn = (sec, d) => { let b = sec.idx[0], bd = Infinity; for (const i of sec.idx) { const q = Math.abs(S.meta.stations[i].dist - d); if (q < bd) { bd = q; b = i; } } return b; };
 
 // row layout in device px: rows[y] = station id or -1, panels = [{sec, y0, y1, mpp}]
 function evLayout(H) {
-  const dpr = devicePixelRatio, key = `${H}|${EV.rows}|${dpr}`;
+  const dpr = devicePixelRatio, key = `${H}|${EV.rows}|${dpr}|${[...EV.hide].join(",")}`;
   if (EV.L && EV.Lkey === key) return EV.L;
   const top = Math.round(EV_TOP * dpr), bot = Math.round(H - EV_BOT * dpr), ph = bot - top;
   const rows = new Int32Array(ph).fill(-1), panels = [];
+  let ids = null; // fiber mode: the station ids shown, in fiber order
   if (EV.rows === "fiber") {
-    for (let y = 0; y < ph; y++) rows[y] = Math.min(S.nst - 1, Math.floor(y / ph * S.nst));
+    ids = S.meta.stations.map((s, i) => i).filter((i) => !EV.hide.has(S.meta.stations[i].section));
+    const at = new Map(ids.map((id, k) => [id, k]));
+    if (ids.length) for (let y = 0; y < ph; y++) rows[y] = ids[Math.min(ids.length - 1, Math.floor(y / ph * ids.length))];
     for (const sec of SECS) {
-      const ids = [...sec.idx].sort((a, b) => a - b);
-      panels.push({ sec, y0: ids[0] / S.nst * ph, y1: (ids.at(-1) + 1) / S.nst * ph, mpp: null });
+      if (EV.hide.has(sec.name)) continue;
+      const k = sec.idx.map((i) => at.get(i)).sort((a, b) => a - b);
+      panels.push({ sec, y0: k[0] / ids.length * ph, y1: (k.at(-1) + 1) / ids.length * ph, mpp: null });
     }
   } else {
-    const show = SECS.filter((s) => s.has), gap = 6 * dpr, minH = 16 * dpr;
+    const show = SECS.filter((s) => s.has && !EV.hide.has(s.name)), gap = 6 * dpr, minH = 16 * dpr;
     let avail = ph - gap * (show.length - 1), total = show.reduce((a, s) => a + s.len, 0);
     let mpp = total / avail;
     const small = show.filter((s) => s.len / mpp < minH);
@@ -652,7 +709,7 @@ function evLayout(H) {
       panels.push(p); y += h + gap;
     }
   }
-  EV.L = { top, bot, ph, rows, panels }; EV.Lkey = key;
+  EV.L = { top, bot, ph, rows, panels, ids }; EV.Lkey = key;
   return EV.L;
 }
 
@@ -678,7 +735,10 @@ function evLoc(y) {
 }
 function evY(sec, dist) { // inverse of evLoc, device px
   const L = EV.L; if (!L) return null;
-  if (EV.rows === "fiber") { const s = secOf(sec); return s ? L.top + (nearestIn(s, dist) + 0.5) / S.nst * L.ph : null; }
+  if (EV.rows === "fiber") {
+    const s = secOf(sec), k = s && !EV.hide.has(sec) ? L.ids.indexOf(nearestIn(s, dist)) : -1;
+    return k >= 0 ? L.top + (k + 0.5) / L.ids.length * L.ph : null;
+  }
   const p = L.panels.find((p) => p.sec.name === sec); return p ? L.top + p.y0 + dist / p.mpp : null;
 }
 
@@ -691,8 +751,10 @@ function evLUT() { // 256 colors over n in [-1, 1]
 }
 
 // "per section" clip: like the event clip (99th pct of |amplitude| over the clip window after the origin), but computed
-// separately for each fiber section / leg, so quiet sections (the holes) use their own scale. Cached per event.
+// separately for each fiber section / leg, so quiet sections (the holes) use their own scale. Precomputed in meta.json
+// (events[k].section_clip); older exports without it are computed here once per event.
 function sectionClip(e, s) {
+  if (!e._secClip && e.section_clip) e._secClip = e.section_clip;
   if (!e._secClip) {
     const cw = e.clip_window || [0, (e.n / e.fs) - (e.origin - e.t0)];
     const i0 = Math.max(0, Math.round((e.origin - e.t0 + cw[0]) * e.fs)), i1 = Math.min(e.n, Math.round((e.origin - e.t0 + cw[1]) * e.fs));
@@ -742,6 +804,7 @@ function drawEventView(e) {
     }
   }
   g.putImageData(img, x0, L.top);
+  if (!L.panels.length) { g.fillStyle = "#000"; g.font = `${12 * dpr}px Courier New`; g.fillText("no section selected: tick one in the sections bar", x0 + 8 * dpr, L.top + 20 * dpr); }
 
   // frames, section labels, distance ticks
   g.font = `${10 * dpr}px Courier New`; g.fillStyle = "#000"; g.strokeStyle = "#000"; g.lineWidth = 1;
@@ -795,7 +858,8 @@ function drawEventView(e) {
 }
 
 function evUI(e) {
-  $("ev-state").textContent = e ? `event view E${e.i + 1}` : "day view";
+  $("ev-state").textContent = e ? `event view E${e.i + 1}${e.label ? ` · ${e.label.toUpperCase()}` : ""}` : "day view";
+  $("ev-state").style.color = e && e.label ? MAIN_COLOR : "";
   if (e) {
     const rows = EV.rows === "sections"
       ? "Rows: one panel per fiber section; y = distance along the section (m) from its first channel (back legs flipped onto their forth leg; holes: depth). Every panel uses the same m/px, so equal slope = equal apparent velocity."
@@ -846,6 +910,8 @@ function evUI(e) {
 $("ev-span").onchange = (e) => { EV.span = +e.target.value; S.dirty = true; };
 $("ev-rows").onchange = (e) => { EV.rows = e.target.value; EV.Lkey = ""; S.dirty = true; };
 $("ev-norm").onchange = (e) => { EV.norm = e.target.value; S.dirty = true; };
+$("ev-all").onclick = () => setAllSections(true);
+$("ev-none").onclick = () => setAllSections(false);
 $("wf-h").onchange = (e) => { document.documentElement.style.setProperty("--wf-h", `${e.target.value}px`); EV.Lkey = ""; resize(); };
 
 // ---------- controls ----------
@@ -860,16 +926,24 @@ document.querySelectorAll("[data-step]").forEach((b) => b.onclick = () => setT(S
 // double press), go to the start of the previous event instead.
 const evStart = (e) => Math.max(e.t0, e.origin - 20);  // 20 s of lead-in, or the window start if the window is shorter
 let lastPrev = null;
+// "Current" = the event shown in the event view; outside any window, the last event that started before the cursor.
+// (Comparing start times alone breaks when windows overlap: an event can start before the previous one's origin.)
+const goEvent = (k) => { evPin = S.events[k]; setT(evStart(evPin)); };
 $("prev-ev").onclick = () => {
-  let cur = -1;
-  S.events.forEach((e, k) => { if (evStart(e) <= S.t + 0.01) cur = k; });
+  const shown = activeEvent(S.t);
+  let cur = shown ? shown.i : -1;
+  if (!shown) S.events.forEach((e, k) => { if (evStart(e) <= S.t + 0.01) cur = k; });
   if (cur < 0) return;
   const atStart = S.t - evStart(S.events[cur]) < 1 || (lastPrev && lastPrev.k === cur && performance.now() - lastPrev.at < 1500);
   const k = atStart ? cur - 1 : cur;
   if (k < 0) return;
-  setT(evStart(S.events[k])); lastPrev = { k, at: performance.now() };
+  goEvent(k); lastPrev = { k, at: performance.now() };
 };
-$("next-ev").onclick = () => { const e = S.events.find((e) => evStart(e) > S.t + 0.5); if (e) setT(evStart(e)); };
+$("next-ev").onclick = () => {
+  const shown = activeEvent(S.t);
+  const k = shown ? shown.i + 1 : S.events.findIndex((e) => evStart(e) > S.t + 0.5);
+  if (k >= 0 && k < S.events.length) goEvent(k);
+};
 $("goto").onchange = (e) => {
   const m = e.target.value.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
   if (!m) return;
@@ -899,7 +973,10 @@ function frame(now) {
     const e = activeEvent(S.t);
     if (e) ensureEvent(e);
     const ev = modeIsEvent();
-    if (ev !== lastEvent) { lastEvent = ev; if (ev && S.evmode === "envelope") ensureEnvelope(ev); drawColorbar(); }
+    if (ev !== lastEvent) {
+      lastEvent = ev; if (ev && S.evmode === "envelope") ensureEnvelope(ev); drawColorbar();
+      if (ev) prefetchNeighbours(ev);
+    }
     if (ev !== arrowFor) updateArrow(ev);
     if (S.dirty) {
       const top = !!(ev && S.evmode === "envelope" && !arrivalsOn(ev));

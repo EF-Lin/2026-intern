@@ -199,9 +199,12 @@ def web_day(folder: str | None = None):
     stations = build_stations(sections, c["every"], set(paths))
     start = f"{c['day'][:4]}-{c['day'][4:6]}-{c['day'][6:]}T00:00:00"
     times = list(c["events"]) + ([row["Time"] for row in load_csv(c["events_csv"])] if c.get("events_csv") else [])
-    times = sorted(set(times), key=np.datetime64)  # time order: the page takes the first window that covers the cursor
+    times = sorted(set(times), key=np.datetime64)  # time order (E1, E2, … on the page)
     print(f"{len(times)} events")
     log_rms, events = build_day(paths, stations, start, c["frequency"], times, c["event_half"], c["event_fs"], workers=c.get("workers", 6))
+    for ev in events:
+        if np.datetime64(ev["time"]) == np.datetime64(c.get("main_shock") or "NaT"):
+            ev["label"] = "main shock"
     arrivals = c.get("arrivals", {})
     arrivals = None if arrivals.get("skip") else {k: v for k, v in arrivals.items() if k != "skip"}
     folder = write_day(c["out"], c["day"], start, stations, fiber_lines(sections), log_rms, events, _web_info(c, origin, demo=False), arrivals=arrivals, clip_window=tuple(c["event_clip"]))
