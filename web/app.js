@@ -78,8 +78,8 @@ function eventValue(e, s, t) { // counts (or ε/s), null if not loaded
 // second file per event. Color scale either in counts (median .. 99.9th pct of all stations) or, per station, as
 // SNR in dB = 20·log10(env / its pre-event noise) over SNR_DB (÷ clip on the top), so loud surface stations and
 // quiet borehole stations light up alike (a linear scale is set by the strong borehole arrivals and leaves the
-// surface white). arrival = first sample where the station mean of env / (station noise median) exceeds ARRIVAL_RATIO.
-const ARRIVAL_RATIO = 2.5, NOISE_S = 200, SNR_DB = [6, 26];
+// surface white).
+const NOISE_S = 200, SNR_DB = [6, 26];
 function ensureEnvelope(e) {
   if (!e.data) return null;
   if (e.env && e.envSmooth === S.smooth) return e.env;
@@ -107,13 +107,7 @@ function ensureEnvelope(e) {
   for (let i = 0; i < n; i += 31) for (let s = 0; s < ns; s++) if (e.scale[s]) all.push(env[i * ns + s]);
   all.sort((a, b) => a - b);
   const pct = (p) => all[Math.min(all.length - 1, Math.floor(p / 100 * all.length))];
-  let arrival = null;
-  for (let i = 0; i < n && arrival === null; i++) {
-    let m = 0, k = 0;
-    for (let s = 0; s < ns; s++) if (e.scale[s]) { m += env[i * ns + s] / noise[s]; k++; }
-    if (k && m / k > ARRIVAL_RATIO) arrival = e.t0 + i / e.fs;
-  }
-  Object.assign(e, { env, noise, envSmooth: S.smooth, arrival, envCounts: [pct(50), pct(99.9)] });
+  Object.assign(e, { env, noise, envSmooth: S.smooth, envCounts: [pct(50), pct(99.9)] });
   setTimeout(drawColorbar);
   return env;
 }
@@ -838,19 +832,25 @@ $("wf-h").onchange = (e) => { document.documentElement.style.setProperty("--wf-h
 // ---------- controls ----------
 $("play").onclick = () => { S.playing = !S.playing; $("play").textContent = S.playing ? "pause" : "play"; $("play").classList.toggle("on", S.playing); };
 $("speed").onchange = (e) => S.speed = +e.target.value;
-const setSpeed = (v) => { S.speed = v; $("speed").value = String(v); };
-// jump to 1 s before the first strong arrival of the event under (or next after) the cursor and play at 0.05×
-$("replay").onclick = () => {
-  const e = activeEvent(S.t) || S.events.find((e) => e.t0 > S.t) || S.events[0];
-  if (!e || !e.data || !ensureEnvelope(e)) { $("status").textContent = "event data not loaded yet"; return; }
-  setT((e.arrival ?? e.origin) - 1); setSpeed(0.05);
-  if (!S.playing) $("play").click();
-};
 document.querySelectorAll("input[name=evmode]").forEach((r) => r.onchange = () => { S.evmode = r.value; drawColorbar(); S.dirty = true; });
 document.querySelectorAll("input[name=envscale]").forEach((r) => r.onchange = () => { S.envscale = r.value; drawColorbar(); S.dirty = true; });
 document.querySelectorAll("[data-step]").forEach((b) => b.onclick = () => setT(S.t + +b.dataset.step));
-$("prev-ev").onclick = () => { const e = [...S.events].reverse().find((e) => e.origin < S.t - 21); if (e) setT(e.origin - 20); };
-$("next-ev").onclick = () => { const e = S.events.find((e) => e.origin > S.t + 20.5); if (e) setT(e.origin - 20); };
+// event navigation. An event's "start" = 20 s before its origin time (where both buttons land).
+// ◀: back to the start of the current event (the last one whose start is before the cursor); if the cursor is
+// already at that start (within 1 s, or ◀ was pressed on it less than 1.5 s ago, so playback cannot defeat a
+// double press), go to the start of the previous event instead.
+const evStart = (e) => e.origin - 20;
+let lastPrev = null;
+$("prev-ev").onclick = () => {
+  let cur = -1;
+  S.events.forEach((e, k) => { if (evStart(e) <= S.t + 0.01) cur = k; });
+  if (cur < 0) return;
+  const atStart = S.t - evStart(S.events[cur]) < 1 || (lastPrev && lastPrev.k === cur && performance.now() - lastPrev.at < 1500);
+  const k = atStart ? cur - 1 : cur;
+  if (k < 0) return;
+  setT(evStart(S.events[k])); lastPrev = { k, at: performance.now() };
+};
+$("next-ev").onclick = () => { const e = S.events.find((e) => evStart(e) > S.t + 0.5); if (e) setT(evStart(e)); };
 $("goto").onchange = (e) => {
   const m = e.target.value.trim().match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
   if (!m) return;
