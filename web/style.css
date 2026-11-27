@@ -36,8 +36,8 @@ canvas { display: block; width: 100%; }
 #cb-title, #wave-title, #wf-title { font-size: 12px; }
 #station { white-space: pre; margin-bottom: 4px; }
 #arr-text { font-size: 12px; }
-#arr-text ul { margin: 2px 0; padding-left: 18px; }
-#arr-text ul ul { margin: 0; list-style: circle; }
+#arr-text ul, #cb-title ul { margin: 2px 0; padding-left: 18px; }
+#arr-text ul ul, #cb-title ul ul { margin: 0; list-style: circle; }
 #arr-text:not(:empty) { border-top: 1px solid #000; margin-top: 4px; padding-top: 4px; }
 #wave { border: 1px solid #000; }
 

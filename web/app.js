@@ -365,13 +365,12 @@ function drawColorbar() {
     const [lo, hi] = envLoHi(e), snr = S.envscale === "snr";
     const f = (v) => snr ? v.toFixed(1) : v.toPrecision(3);
     $("cb-lo").textContent = f(lo); $("cb-mid").textContent = f((lo + hi) / 2); $("cb-hi").textContent = f(hi);
-    $("cb-title").textContent = (snr
-      ? `Envelope SNR (dB) = 20·log10(envelope / station noise), ${band}, smoothing ${S.smooth} s. `
-        + `Noise = each station's median envelope in the first ${NOISE_S} s of the window. Range ${SNR_DB[0]}–${SNR_DB[1]} dB, top ÷ ${S.gain}. `
-      : `Envelope of filtered amplitude (${S.unit}), ${band}, smoothing ${S.smooth} s. Low end = median envelope of this event window, `
-        + `high end = 99.9th pct ÷ ${S.gain}. `)
-      + `Envelope = sqrt of centred moving mean of x², linear between ${e.fs} Hz samples.`
-      + (S.trail ? ` Trail: peak of the last ${S.trail} s, fading linearly to 0.` : "");
+    const env = [`envelope: sqrt of the centred moving mean of x² over ${S.smooth} s, linear between ${e.fs} Hz samples`, [`filter: ${band}`]];
+    const trail = S.trail ? [[`trail: peak of the last ${S.trail} s, fading linearly to 0`]] : [];
+    renderList($("cb-title"), snr ? "Envelope SNR (dB)" : `Envelope of filtered amplitude (${S.unit})`, snr
+      ? [[`SNR = 20·log10(envelope / station noise)`], env, [`station noise: median envelope in the first ${NOISE_S} s of the window`],
+         [`color range: ${SNR_DB[0]}–${SNR_DB[1]} dB, top ÷ ${S.gain}`], ...trail]
+      : [env, [`color range: median envelope of this event window to its 99.9th percentile ÷ ${S.gain}`], ...trail]);
     $("mode-line").textContent = `MODE: event envelope E${e.i + 1}`;
   } else if (e) {
     const v = e.vmax * S.k / S.gain;
@@ -405,10 +404,9 @@ function arrivalList(e) {
   if (e.source) items.push([`DEMO truth: ${e.source.azimuth.toFixed(0)}° (error ${angDiff(a.baz, e.source.azimuth).toFixed(1)}°)`]);
   return { title, items };
 }
-function renderArrivals(el, e) {
-  el.replaceChildren();
-  if (!e || !e.arrivals) return;
-  const { title, items } = arrivalList(e), ul = (rows) => {
+// heading + bullet list; items = [[text, [sub-bullet, …]?], …]
+function renderList(el, title, items) {
+  const ul = (rows) => {
     const u = document.createElement("ul");
     for (const [text, sub] of rows) {
       const li = document.createElement("li"); li.textContent = text;
@@ -418,7 +416,12 @@ function renderArrivals(el, e) {
     return u;
   };
   const h = document.createElement("div"); h.textContent = title;
-  el.append(h, ul(items));
+  el.replaceChildren(h, ul(items));
+}
+function renderArrivals(el, e) {
+  if (!e || !e.arrivals) { el.replaceChildren(); return; }
+  const { title, items } = arrivalList(e);
+  renderList(el, title, items);
 }
 
 // direction arrow on the ground plane: from the array centre toward where the wave comes from, with ±1σ wedge
@@ -845,8 +848,6 @@ $("replay").onclick = () => {
 };
 document.querySelectorAll("input[name=evmode]").forEach((r) => r.onchange = () => { S.evmode = r.value; drawColorbar(); S.dirty = true; });
 document.querySelectorAll("input[name=envscale]").forEach((r) => r.onchange = () => { S.envscale = r.value; drawColorbar(); S.dirty = true; });
-$("smooth").onchange =(e) => { S.smooth = +e.target.value; S.dirty = true; };
-$("trail").onchange = (e) => { S.trail = +e.target.value; drawColorbar(); S.dirty = true; };
 document.querySelectorAll("[data-step]").forEach((b) => b.onclick = () => setT(S.t + +b.dataset.step));
 $("prev-ev").onclick = () => { const e = [...S.events].reverse().find((e) => e.origin < S.t - 21); if (e) setT(e.origin - 20); };
 $("next-ev").onclick = () => { const e = S.events.find((e) => e.origin > S.t + 20.5); if (e) setT(e.origin - 20); };
@@ -858,17 +859,11 @@ $("goto").onchange = (e) => {
 };
 document.querySelectorAll("input[name=norm]").forEach((r) => r.onchange = () => { S.norm = r.value; syncSettings(); });
 function syncSettings() {
-  const [lo, hi] = S.range[S.norm];
-  $("lo").value = lo; $("hi").value = hi; $("range-unit").textContent = S.norm === "abs" ? `log10 ${S.unit}` : "dB";
   buildWaterfallImage(); drawColorbar(); S.dirty = true;
 }
-const setRange = () => { S.range[S.norm] = [+$("lo").value, +$("hi").value]; syncSettings(); };
-$("lo").onchange = setRange; $("hi").onchange = setRange;
-$("range-reset").onclick = () => { S.range[S.norm] = S.norm === "abs" ? S.meta.rms.default_range.map((v) => +(v + S.logK).toFixed(2)) : [0, 30]; syncSettings(); };
 $("gain").oninput = (e) => { S.gain = +e.target.value; $("gain-v").textContent = `×${S.gain.toFixed(1)}`; drawColorbar(); S.dirty = true; };
 $("cmap").onchange = (e) => { S.cmap = e.target.value; syncSettings(); };
 $("arr-toggle").onchange = (e) => { S.arrivals = e.target.checked; drawColorbar(); S.dirty = true; };
-$("exag").onchange = (e) => { S.exag = +e.target.value; buildScene(); S.dirty = true; };
 $("day").onchange = (e) => { const u = new URL(location); u.searchParams.set("day", e.target.value); location = u; };
 window.addEventListener("keydown", (e) => {
   if (e.target.tagName === "INPUT" || e.target.tagName === "SELECT" || !S.meta) return;
